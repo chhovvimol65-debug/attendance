@@ -1,0 +1,9 @@
+{
+  "name": "Employee Attendance Management",
+  "description": "Smart Employee Attendance Management system with instant QR code scanning, Google Apps Script integration, manual ID fallback, audio-visual feedback, and bilingual English & Khmer support.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

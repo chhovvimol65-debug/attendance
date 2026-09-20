@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-khmer: 'Khmer OS Battambang', 'Battambang', 'Kantumruy Pro', system-ui, sans-serif;
+  }
+
+  body {
+    font-family: 'Khmer OS Battambang', 'Battambang', 'Kantumruy Pro', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 1.65;
+    letter-spacing: 0.015em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Ensure inputs, buttons, and headings use Khmer OS Battambang with clear bold weight */
+  button, input, select, textarea, optgroup {
+    font-family: inherit;
+    font-weight: 700;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: inherit;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  p, span, label, td, th {
+    font-weight: 600;
+  }
+}
+
+/* Custom QR scanning laser animation */
+@keyframes scan-laser {
+  0% {
+    top: 5%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 90%;
+    opacity: 1;
+  }
+  100% {
+    top: 5%;
+    opacity: 0.8;
+  }
+}
+
+.animate-scan-laser {
+  animation: scan-laser 2.2s ease-in-out infinite;
+}
