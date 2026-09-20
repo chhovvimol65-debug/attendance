@@ -18,14 +18,7 @@ import {
   SlidersHorizontal,
   RefreshCw,
   Eye,
-  DollarSign,
-  Loader2,
-  CheckSquare,
-  Square,
-  FileDown,
-  Layers,
-  ChevronDown,
-  Check
+  DollarSign
 } from 'lucide-react';
 import { 
   Employee, 
@@ -42,7 +35,6 @@ import {
   savePayrollPeriod, 
   getWorkDaysInMonth 
 } from '../services/payrollService';
-import { exportPayslipsToPdf, PdfExportProgress } from '../services/pdfService';
 import { PayslipModal } from './PayslipModal';
 
 interface PayrollManagementProps {
@@ -74,15 +66,6 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
   const [currentPeriod, setCurrentPeriod] = useState<PayrollPeriod | null>(null);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [selectedPayslipItem, setSelectedPayslipItem] = useState<EmployeePayrollItem | null>(null);
-
-  // Employee selection for batch PDF export
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
-  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
-  const [pdfExportProgress, setPdfExportProgress] = useState<PdfExportProgress | null>(null);
-  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
-  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
-  const [singleExportingId, setSingleExportingId] = useState<string | null>(null);
-  const [exportDropdownOpen, setExportDropdownOpen] = useState<boolean>(false);
 
   // Re-sync employees on custom events
   useEffect(() => {
@@ -214,123 +197,6 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
     document.body.removeChild(link);
   };
 
-  // Toggle selection for an individual employee
-  const handleToggleEmployee = (employeeId: string) => {
-    setSelectedEmployeeIds(prev => {
-      const next = new Set(prev);
-      if (next.has(employeeId)) {
-        next.delete(employeeId);
-      } else {
-        next.add(employeeId);
-      }
-      return next;
-    });
-  };
-
-  // Toggle select all filtered employees
-  const handleToggleSelectAll = () => {
-    if (selectedEmployeeIds.size === filteredItems.length && filteredItems.length > 0) {
-      setSelectedEmployeeIds(new Set());
-    } else {
-      setSelectedEmployeeIds(new Set(filteredItems.map(item => item.employeeId)));
-    }
-  };
-
-  // Clear selection
-  const handleClearSelection = () => {
-    setSelectedEmployeeIds(new Set());
-  };
-
-  // Export selected employees to PDF
-  const handleExportSelectedPdf = async (mode: 'merged' | 'individual' = 'merged') => {
-    const targetItems = filteredItems.filter(item => selectedEmployeeIds.has(item.employeeId));
-    if (targetItems.length === 0) return;
-
-    try {
-      setIsExportingPdf(true);
-      setPdfExportProgress({ current: 1, total: targetItems.length, employeeName: targetItems[0].fullName });
-      await exportPayslipsToPdf(targetItems, selectedMonth, selectedYear, language, mode, (p) => {
-        setPdfExportProgress(p);
-      });
-      setExportSuccessMessage(
-        language === 'km'
-          ? `បានបង្កើតប័ណ្ណបើកប្រាក់ PDF ចំនួន ${targetItems.length} រួចរាល់!`
-          : `Successfully exported ${targetItems.length} salary slip(s) as PDF!`
-      );
-      setTimeout(() => setExportSuccessMessage(null), 4000);
-    } catch (err: unknown) {
-      console.error('Failed to export selected payslips PDF:', err);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setExportErrorMessage(
-        language === 'km'
-          ? `ការទាញយក PDF បរាជ័យ៖ ${errMsg}`
-          : `Failed to export selected payslips PDF: ${errMsg}`
-      );
-      setTimeout(() => setExportErrorMessage(null), 5000);
-    } finally {
-      setIsExportingPdf(false);
-      setPdfExportProgress(null);
-      setExportDropdownOpen(false);
-    }
-  };
-
-  // Export all filtered employees to PDF
-  const handleExportAllPdf = async (mode: 'merged' | 'individual' = 'merged') => {
-    if (filteredItems.length === 0) return;
-
-    try {
-      setIsExportingPdf(true);
-      setPdfExportProgress({ current: 1, total: filteredItems.length, employeeName: filteredItems[0].fullName });
-      await exportPayslipsToPdf(filteredItems, selectedMonth, selectedYear, language, mode, (p) => {
-        setPdfExportProgress(p);
-      });
-      setExportSuccessMessage(
-        language === 'km'
-          ? `បានបង្កើតប័ណ្ណបើកប្រាក់ PDF ទាំងអស់ចំនួន ${filteredItems.length} នាក់រួចរាល់!`
-          : `Successfully exported all ${filteredItems.length} employee payslips as PDF!`
-      );
-      setTimeout(() => setExportSuccessMessage(null), 4000);
-    } catch (err: unknown) {
-      console.error('Failed to export all payslips PDF:', err);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setExportErrorMessage(
-        language === 'km'
-          ? `ការទាញយក PDF បរាជ័យ៖ ${errMsg}`
-          : `Failed to export all payslips PDF: ${errMsg}`
-      );
-      setTimeout(() => setExportErrorMessage(null), 5000);
-    } finally {
-      setIsExportingPdf(false);
-      setPdfExportProgress(null);
-      setExportDropdownOpen(false);
-    }
-  };
-
-  // Export single employee to PDF from table row
-  const handleExportSingleItemPdf = async (item: EmployeePayrollItem) => {
-    try {
-      setSingleExportingId(item.employeeId);
-      await exportPayslipsToPdf([item], selectedMonth, selectedYear, language, 'merged');
-      setExportSuccessMessage(
-        language === 'km'
-          ? `បានបង្កើតប័ណ្ណបើកប្រាក់ PDF សម្រាប់ ${item.fullNameKhmer || item.fullName} រួចរាល់!`
-          : `Successfully exported salary slip for ${item.fullName}!`
-      );
-      setTimeout(() => setExportSuccessMessage(null), 3500);
-    } catch (err: unknown) {
-      console.error('Failed to export single payslip PDF:', err);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setExportErrorMessage(
-        language === 'km'
-          ? `ការទាញយក PDF បរាជ័យ៖ ${errMsg}`
-          : `Failed to export payslip PDF: ${errMsg}`
-      );
-      setTimeout(() => setExportErrorMessage(null), 5000);
-    } finally {
-      setSingleExportingId(null);
-    }
-  };
-
   const handlePrint = () => {
     window.print();
   };
@@ -376,116 +242,6 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
                 : (language === 'km' ? 'គណនាប្រាក់ខែឡើងវិញ' : 'Generate / Recalculate')}
             </span>
           </button>
-
-          {/* PDF Export Dropdown */}
-          <div className="relative">
-            <button
-              id="btn-export-pdf-menu"
-              type="button"
-              onClick={() => setExportDropdownOpen(prev => !prev)}
-              disabled={isExportingPdf || filteredItems.length === 0}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold shadow-2xs transition-colors disabled:opacity-50"
-            >
-              {isExportingPdf ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-              ) : (
-                <FileDown className="w-3.5 h-3.5 text-indigo-600" />
-              )}
-              <span>
-                {selectedEmployeeIds.size > 0
-                  ? (language === 'km' 
-                      ? `ទាញយក PDF (${selectedEmployeeIds.size})` 
-                      : `Export PDF (${selectedEmployeeIds.size})`)
-                  : (language === 'km' ? 'ទាញយក PDF' : 'Export PDF')}
-              </span>
-              <ChevronDown className="w-3 h-3 text-indigo-500 ml-0.5" />
-            </button>
-
-            {exportDropdownOpen && (
-              <div 
-                className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-30 space-y-1 text-slate-700 animate-in fade-in zoom-in-95"
-                onMouseLeave={() => setExportDropdownOpen(false)}
-              >
-                {selectedEmployeeIds.size > 0 ? (
-                  <>
-                    <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      {language === 'km' 
-                        ? `សម្រាប់បុគ្គលិកដែលបានជ្រើស (${selectedEmployeeIds.size} នាក់)` 
-                        : `Selected Staff (${selectedEmployeeIds.size} employees)`}
-                    </div>
-
-                    <button
-                      id="btn-export-selected-merged"
-                      type="button"
-                      onClick={() => handleExportSelectedPdf('merged')}
-                      className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                    >
-                      <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <div>
-                        <div>{language === 'km' ? 'ឯកសារ PDF រួមបញ្ចូលគ្នា (Merged A4)' : 'Single Merged PDF (A4 Multi-page)'}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">
-                          {language === 'km' ? 'ប័ណ្ណទាំងអស់ក្នុងឯកសារ PDF មួយ' : 'All selected payslips in 1 document'}
-                        </div>
-                      </div>
-                    </button>
-
-                    <button
-                      id="btn-export-selected-individual"
-                      type="button"
-                      onClick={() => handleExportSelectedPdf('individual')}
-                      className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                    >
-                      <Download className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div>
-                        <div>{language === 'km' ? 'ឯកសារ PDF ដាច់ដោយឡែក' : 'Individual PDF Files'}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">
-                          {language === 'km' ? 'ទាញយកជា file PDF ម្នាក់មួយ' : 'Separate file downloaded per employee'}
-                        </div>
-                      </div>
-                    </button>
-
-                    <div className="my-1 border-t border-slate-100"></div>
-                  </>
-                ) : null}
-
-                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  {language === 'km' 
-                    ? `បុគ្គលិកទាំងអស់ (${filteredItems.length} នាក់)` 
-                    : `All Employees (${filteredItems.length} staff)`}
-                </div>
-
-                <button
-                  id="btn-export-all-merged"
-                  type="button"
-                  onClick={() => handleExportAllPdf('merged')}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                >
-                  <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <div>
-                    <div>{language === 'km' ? 'ទាញយកទាំងអស់ (Merged PDF)' : 'Export All (Single Merged PDF)'}</div>
-                    <div className="text-[10px] text-slate-400 font-normal">
-                      {language === 'km' ? 'រាល់បុគ្គលិកទាំងអស់ក្នុង file មួយ' : 'Complete payroll batch in one A4 file'}
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  id="btn-export-all-individual"
-                  type="button"
-                  onClick={() => handleExportAllPdf('individual')}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                >
-                  <Download className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <div>
-                    <div>{language === 'km' ? 'ទាញយកទាំងអស់ (Separate PDFs)' : 'Export All (Separate PDFs)'}</div>
-                    <div className="text-[10px] text-slate-400 font-normal">
-                      {language === 'km' ? 'បង្កើតឯកសារដាច់ដោយឡែកគ្រប់គ្នា' : 'Generates individual PDF per staff member'}
-                    </div>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
 
           <button
             id="btn-export-payroll-csv"
@@ -720,71 +476,6 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
 
       </div>
 
-      {/* Selection Action Bar (Appears when 1+ employees are selected) */}
-      {selectedEmployeeIds.size > 0 && (
-        <div className="bg-slate-900 text-white rounded-2xl p-3 sm:p-4 shadow-xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-sm text-white shadow-xs">
-              {selectedEmployeeIds.size}
-            </div>
-            <div>
-              <div className="font-bold text-sm flex items-center gap-2">
-                <span>
-                  {language === 'km' 
-                    ? `បានជ្រើសរើសបុគ្គលិកចំនួន ${selectedEmployeeIds.size} នាក់` 
-                    : `${selectedEmployeeIds.size} employee(s) selected`}
-                </span>
-                <span className="text-[11px] text-slate-400 font-normal">
-                  ({filteredItems.length} {language === 'km' ? 'សរុប' : 'total in list'})
-                </span>
-              </div>
-              <div className="text-xs text-slate-300">
-                {language === 'km' 
-                  ? 'ទាញយកប័ណ្ណបើកប្រាក់ជា PDF ផ្លូវការដោយមានការកាត់លុយស្កេនយឺត' 
-                  : 'Ready to export official formatted salary slips with late attendance audit'}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              id="btn-export-selected-action-merged"
-              type="button"
-              onClick={() => handleExportSelectedPdf('merged')}
-              disabled={isExportingPdf}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-indigo-950/40 disabled:opacity-50"
-            >
-              {isExportingPdf ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <FileDown className="w-3.5 h-3.5" />
-              )}
-              <span>{language === 'km' ? 'ទាញយក PDF (A4 Merged)' : 'Export Selected (PDF)'}</span>
-            </button>
-
-            <button
-              id="btn-export-selected-action-individual"
-              type="button"
-              onClick={() => handleExportSelectedPdf('individual')}
-              disabled={isExportingPdf}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium transition-all border border-slate-700"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-400" />
-              <span>{language === 'km' ? 'PDF ដាច់ដោយឡែក' : 'Separate PDFs'}</span>
-            </button>
-
-            <button
-              id="btn-clear-selection"
-              type="button"
-              onClick={handleClearSelection}
-              className="px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-xs font-medium transition-colors"
-            >
-              {language === 'km' ? 'ដោះការជ្រើស' : 'Clear'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 4. Payroll Roster Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -798,40 +489,15 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
                 : 'Real-time deduction computed strictly from biometric/QR attendance scan timestamps'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {selectedEmployeeIds.size > 0 && (
-              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
-                {selectedEmployeeIds.size} {language === 'km' ? 'បានជ្រើស' : 'selected'}
-              </span>
-            )}
-            <span className="text-xs font-semibold text-slate-500">
-              {filteredItems.length} {language === 'km' ? 'បុគ្គលិក' : 'employees'}
-            </span>
-          </div>
+          <span className="text-xs font-semibold text-slate-500">
+            {filteredItems.length} {language === 'km' ? 'បុគ្គលិក' : 'employees'}
+          </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="w-10 px-3 py-3.5 text-center">
-                  <button
-                    type="button"
-                    onClick={handleToggleSelectAll}
-                    className="p-1 text-slate-400 hover:text-indigo-600 focus:outline-hidden transition-colors rounded"
-                    title={selectedEmployeeIds.size === filteredItems.length && filteredItems.length > 0 ? 'Deselect All' : 'Select All'}
-                  >
-                    {selectedEmployeeIds.size === filteredItems.length && filteredItems.length > 0 ? (
-                      <CheckSquare className="w-4 h-4 text-indigo-600" />
-                    ) : selectedEmployeeIds.size > 0 ? (
-                      <div className="w-4 h-4 rounded bg-indigo-600 flex items-center justify-center text-white">
-                        <div className="w-2 h-0.5 bg-white"></div>
-                      </div>
-                    ) : (
-                      <Square className="w-4 h-4 text-slate-400" />
-                    )}
-                  </button>
-                </th>
                 <th className="px-4 py-3.5">{language === 'km' ? 'បុគ្គលិក' : 'Employee'}</th>
                 <th className="px-4 py-3.5">{language === 'km' ? 'ផ្នែក & តួនាទី' : 'Department & Role'}</th>
                 <th className="px-4 py-3.5">{language === 'km' ? 'ម៉ោងកំណត់' : 'Shift Schedule'}</th>
@@ -846,27 +512,9 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredItems.map(item => {
                 const hasLate = item.lateScans > 0;
-                const isSelected = selectedEmployeeIds.has(item.employeeId);
 
                 return (
-                  <tr 
-                    key={item.employeeId} 
-                    className={`transition-colors ${isSelected ? 'bg-indigo-50/50 hover:bg-indigo-50/80' : 'hover:bg-slate-50/80'}`}
-                  >
-                    {/* Row Checkbox */}
-                    <td className="w-10 px-3 py-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleEmployee(item.employeeId)}
-                        className="p-1 text-slate-400 hover:text-indigo-600 transition-colors rounded"
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-indigo-600" />
-                        ) : (
-                          <Square className="w-4 h-4" />
-                        )}
-                      </button>
-                    </td>
+                  <tr key={item.employeeId} className="hover:bg-slate-50/80 transition-colors">
                     
                     {/* Employee Profile */}
                     <td className="px-4 py-3">
@@ -963,34 +611,15 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
 
                     {/* Actions */}
                     <td className="px-4 py-3 text-right">
-                      <div className="inline-flex items-center gap-1.5">
-                        {/* Direct Row PDF Export */}
-                        <button
-                          id={`btn-export-pdf-${item.employeeId}`}
-                          onClick={() => handleExportSingleItemPdf(item)}
-                          disabled={singleExportingId === item.employeeId || isExportingPdf}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-700 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
-                          title={language === 'km' ? 'ទាញយកប័ណ្ណបើកប្រាក់ជា PDF' : 'Download Salary Slip (PDF)'}
-                        >
-                          {singleExportingId === item.employeeId ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                          ) : (
-                            <FileDown className="w-3.5 h-3.5 text-emerald-600" />
-                          )}
-                          <span>PDF</span>
-                        </button>
-
-                        {/* View Full Payslip Modal */}
-                        <button
-                          id={`btn-view-payslip-${item.employeeId}`}
-                          onClick={() => setSelectedPayslipItem(item)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
-                          title={language === 'km' ? 'មើលប័ណ្ណបើកប្រាក់ខែ' : 'View Payslip'}
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>{language === 'km' ? 'ប័ណ្ណបើកប្រាក់' : 'Payslip'}</span>
-                        </button>
-                      </div>
+                      <button
+                        id={`btn-view-payslip-${item.employeeId}`}
+                        onClick={() => setSelectedPayslipItem(item)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
+                        title={language === 'km' ? 'មើលប័ណ្ណបើកប្រាក់ខែ' : 'View Payslip'}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>{language === 'km' ? 'ប័ណ្ណបើកប្រាក់' : 'Payslip'}</span>
+                      </button>
                     </td>
 
                   </tr>
@@ -999,7 +628,7 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
 
               {filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
                     <p className="text-sm font-medium">
                       {language === 'km' ? 'មិនមានទិន្នន័យបុគ្គលិកត្រូវបង្ហាញទេ' : 'No employee records found.'}
                     </p>
@@ -1020,55 +649,6 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
           language={language}
           onClose={() => setSelectedPayslipItem(null)}
         />
-      )}
-
-      {/* Export Progress Modal Overlay */}
-      {isExportingPdf && pdfExportProgress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
-              <Loader2 className="w-6 h-6 animate-spin" />
-            </div>
-            <div>
-              <h4 className="font-bold text-slate-800 text-base">
-                {language === 'km' ? 'កំពុងបង្កើតឯកសារ PDF...' : 'Generating Salary Slips (PDF)...'}
-              </h4>
-              <p className="text-xs text-slate-500 mt-1">
-                {language === 'km' 
-                  ? `កំពុងដំណើរការ: ${pdfExportProgress.employeeName} (${pdfExportProgress.current}/${pdfExportProgress.total})` 
-                  : `Processing: ${pdfExportProgress.employeeName} (${pdfExportProgress.current} of ${pdfExportProgress.total})`}
-              </p>
-            </div>
-            
-            {/* Progress bar */}
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div 
-                className="bg-indigo-600 h-full transition-all duration-300 rounded-full"
-                style={{ width: `${Math.round((pdfExportProgress.current / pdfExportProgress.total) * 100)}%` }}
-              />
-            </div>
-            
-            <p className="text-[11px] text-slate-400">
-              {language === 'km' ? 'សូមរង់ចាំមួយភ្លែត...' : 'Rendering high-resolution A4 payslip pages...'}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Success Toast Alert */}
-      {exportSuccessMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 animate-in slide-in-from-bottom-3 duration-200">
-          <CheckCircle2 className="w-5 h-5 text-emerald-100" />
-          <span className="text-xs font-bold">{exportSuccessMessage}</span>
-        </div>
-      )}
-
-      {/* Error Toast Alert */}
-      {exportErrorMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-rose-600 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 animate-in slide-in-from-bottom-3 duration-200">
-          <AlertTriangle className="w-5 h-5 text-rose-200 shrink-0" />
-          <span className="text-xs font-bold">{exportErrorMessage}</span>
-        </div>
       )}
 
     </div>

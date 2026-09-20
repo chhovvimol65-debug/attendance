@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   X, 
   Printer, 
-  Download,
-  Loader2,
   CheckCircle2, 
   AlertTriangle, 
   Calendar, 
@@ -16,7 +14,6 @@ import {
   ArrowDownRight
 } from 'lucide-react';
 import { EmployeePayrollItem, Language } from '../types';
-import { exportPayslipsToPdf } from '../services/pdfService';
 
 interface PayslipModalProps {
   item: EmployeePayrollItem;
@@ -43,22 +40,9 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
   ];
 
   const monthLabel = language === 'km' ? monthNamesKm[month - 1] : monthNamesEn[month - 1];
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const handlePrint = () => {
     window.print();
-  };
-
-  const handleExportPdf = async () => {
-    if (isDownloadingPdf) return;
-    try {
-      setIsDownloadingPdf(true);
-      await exportPayslipsToPdf([item], month, year, language, 'merged');
-    } catch (err) {
-      console.error('Failed to export payslip PDF:', err);
-    } finally {
-      setIsDownloadingPdf(false);
-    }
   };
 
   return (
@@ -77,29 +61,11 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <button
-              id="btn-modal-export-pdf"
-              onClick={handleExportPdf}
-              disabled={isDownloadingPdf}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
-            >
-              {isDownloadingPdf ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Download className="w-3.5 h-3.5" />
-              )}
-              <span>
-                {isDownloadingPdf 
-                  ? (language === 'km' ? 'កំពុងបង្កើត...' : 'Generating...') 
-                  : (language === 'km' ? 'ទាញយក PDF' : 'Download PDF')}
-              </span>
-            </button>
-
-            <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
             >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span>{language === 'km' ? 'បោះពុម្ព (Print)' : 'Print'}</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>{language === 'km' ? 'បោះពុម្ពប័ណ្ណ (Print)' : 'Print Payslip'}</span>
             </button>
             <button
               onClick={onClose}

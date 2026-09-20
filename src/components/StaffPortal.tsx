@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { 
   User, 
@@ -13,23 +13,15 @@ import {
   Camera,
   History,
   ShieldAlert,
-  ShieldCheck,
-  Lock,
   MapPin,
   LocateFixed,
   AlertCircle,
-  Building2,
-  FileText,
-  DollarSign,
-  ChevronRight,
-  Printer
+  Building2
 } from 'lucide-react';
 import { Language, UserAccount, AttendanceRecord, Employee, AppSettings } from '../types';
 import { translations } from '../i18n/translations';
 import { findEmployeeById } from '../data/mockEmployees';
 import { getCurrentPosition, calculateDistanceMeters } from '../utils/geolocation';
-import { calculateEmployeePayroll } from '../services/payrollService';
-import { PayslipModal } from './PayslipModal';
 
 interface StaffPortalProps {
   language: Language;
@@ -54,21 +46,6 @@ export const StaffPortal: React.FC<StaffPortalProps> = ({
 
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const employee = findEmployeeById(currentUser.employeeId);
-
-  // Current Month / Year for Personal Payslip
-  const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
-  const [showPayslipModal, setShowPayslipModal] = useState(false);
-
-  // Calculate personal payroll item for the logged-in staff member
-  const myPayrollItem = useMemo(() => {
-    if (!employee) return null;
-    return calculateEmployeePayroll(employee, records, {
-      month: selectedMonth,
-      year: selectedYear
-    });
-  }, [employee, records, selectedMonth, selectedYear]);
 
   // GPS Distance Check state for the employee
   const [isCheckingGps, setIsCheckingGps] = useState(false);
@@ -246,46 +223,19 @@ export const StaffPortal: React.FC<StaffPortalProps> = ({
               <span>{isCheckingGps ? (language === 'km' ? 'កំពុងពិនិត្យ GPS...' : 'Checking GPS...') : (language === 'km' ? '📍 ពិនិត្យចម្ងាយ GPS ខ្ញុំ' : '📍 Check My Distance')}</span>
             </button>
 
-            {/* View Office Station QR Modal Button */}
+            {/* View Office Management Button */}
             {onOpenStationQrModal && (
               <button
                 type="button"
                 id="btn-portal-view-station-qr"
                 onClick={onOpenStationQrModal}
-                className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                <QrCode className="w-3.5 h-3.5 text-indigo-600" />
-                <span>{language === 'km' ? 'ផ្ទាំងរូបភាព QR ស្ថានីយ' : 'Office Station QR Poster'}</span>
+                <Building2 className="w-3.5 h-3.5" />
+                <span>{language === 'km' ? 'គ្រប់គ្រងការិយាល័យ' : 'Office Management'}</span>
               </button>
             )}
           </div>
-        </div>
-
-        {/* Staff Permission Scope Banner */}
-        <div className="bg-slate-900 text-white rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md border border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 flex items-center justify-center shrink-0">
-              <Lock className="w-5 h-5 text-indigo-300" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
-                  {language === 'km' ? 'កម្រិតសិទ្ធិប្រើប្រាស់៖ បុគ្គលិក (Staff Protected Access)' : 'Account Access Level: Staff Protected'}
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                  {language === 'km' ? 'មានសុវត្ថិភាព' : 'Active & Secured'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                {language === 'km'
-                  ? 'លោកអ្នកអាចប្រើប្រាស់មុខងារស្កេនវត្តមាន មើលប្រវត្តិកំណត់ត្រាផ្ទាល់ខ្លួន និងប័ណ្ណបើកប្រាក់ផ្ទាល់ខ្លួន។ មុខងារគ្រប់គ្រងក្រុមហ៊ុនត្រូវបានរឹតបន្តឹងដោយប្រព័ន្ធសុវត្ថិភាព។'
-                  : 'You have secure access to personal clock-in/out, your personal logs, and monthly payslips. Company-wide management modules are restricted.'}
-              </p>
-            </div>
-          </div>
-          <span className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
-            ID: {currentUser.employeeId}
-          </span>
         </div>
 
         {/* GPS Check Result Feedback */}
@@ -486,117 +436,9 @@ export const StaffPortal: React.FC<StaffPortalProps> = ({
             )}
           </div>
 
-          {/* Personal Payslip Section for Staff */}
-          {myPayrollItem && (
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-base">
-                      {language === 'km' ? 'ប័ណ្ណបើកប្រាក់ប្រចាំខែផ្ទាល់ខ្លួន' : 'My Monthly Salary Slip'}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      {language === 'km' ? 'ផ្អែកលើកំណត់ត្រាវត្តមានផ្ទាល់ខ្លួន' : 'Calculated strictly from your scan records'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Month / Year Select */}
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                      <option key={m} value={m}>
-                        {language === 'km' ? `ខែទី ${m}` : `Month ${m}`}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(Number(e.target.value))}
-                    className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value={2026}>2026</option>
-                    <option value={2025}>2025</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Payslip Summary KPI Row */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-500">
-                    {language === 'km' ? 'ប្រាក់ខែគោល' : 'Base Salary'}
-                  </p>
-                  <p className="text-base font-bold text-slate-900 mt-1">
-                    ${myPayrollItem.baseSalary.toFixed(2)}
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-500">
-                    {language === 'km' ? 'វត្តមានជាក់ស្តែង' : 'Work Days'}
-                  </p>
-                  <p className="text-base font-bold text-indigo-600 mt-1">
-                    {myPayrollItem.daysPresent} <span className="text-xs font-normal text-slate-400">/ {myPayrollItem.totalScheduledWorkDays}</span>
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
-                  <p className="text-[11px] font-semibold text-slate-500">
-                    {language === 'km' ? 'មកយឺត' : 'Late Scans'}
-                  </p>
-                  <p className={`text-base font-bold mt-1 ${myPayrollItem.lateScans > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                    {myPayrollItem.lateScans} <span className="text-xs font-normal text-slate-400">(-${myPayrollItem.lateDeductionAmount})</span>
-                  </p>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100">
-                  <p className="text-[11px] font-semibold text-indigo-700">
-                    {language === 'km' ? 'ប្រាក់ខែសុទ្ធទទួលបាន' : 'Net Pay'}
-                  </p>
-                  <p className="text-base font-extrabold text-indigo-900 mt-1">
-                    ${myPayrollItem.netPay.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <div className="pt-1 flex items-center justify-end">
-                <button
-                  type="button"
-                  id="btn-view-my-payslip"
-                  onClick={() => setShowPayslipModal(true)}
-                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>{language === 'km' ? 'មើល និងទាញយកប័ណ្ណបើកប្រាក់ (PDF)' : 'View & Export Salary Slip (PDF)'}</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
-
         </div>
 
       </div>
-
-      {/* Payslip Modal if opened */}
-      {showPayslipModal && myPayrollItem && (
-        <PayslipModal
-          item={myPayrollItem}
-          month={selectedMonth}
-          year={selectedYear}
-          language={language}
-          onClose={() => setShowPayslipModal(false)}
-        />
-      )}
 
     </div>
   );

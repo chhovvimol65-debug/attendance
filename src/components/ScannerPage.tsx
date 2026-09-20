@@ -32,6 +32,7 @@ interface ScannerPageProps {
   onScanComplete?: (result: AttendanceScanResult) => void;
   currentUser?: UserAccount;
   onOpenStationQrModal?: () => void;
+  onClose?: () => void;
 }
 
 export const ScannerPage: React.FC<ScannerPageProps> = ({
@@ -39,7 +40,8 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
   settings,
   onScanComplete,
   currentUser,
-  onOpenStationQrModal
+  onOpenStationQrModal,
+  onClose
 }) => {
   const t = translations[language];
 
@@ -55,6 +57,11 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
   const [isScanning, setIsScanning] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
+  // Auto-close countdown state after successful scan
+  const [autoCloseSeconds, setAutoCloseSeconds] = useState<number | null>(null);
+  const autoCloseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoCloseIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Audio feedback toggle
   const [soundEnabled, setSoundEnabled] = useState(settings.soundEnabled ?? true);
@@ -93,6 +100,33 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
       }
     }
   };
+
+  // Safely stop all hardware streams, animation loops, timers and invoke onClose
+  const handleCloseSafely = useCallback(() => {
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+    if (autoCloseIntervalRef.current) {
+      clearInterval(autoCloseIntervalRef.current);
+      autoCloseIntervalRef.current = null;
+    }
+    if (cooldownTimerRef.current) {
+      clearInterval(cooldownTimerRef.current);
+      cooldownTimerRef.current = null;
+    }
+    if (scanLoopRef.current) {
+      cancelAnimationFrame(scanLoopRef.current);
+      scanLoopRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (onClose) {
+      onClose();
+    }
+  }, [onClose]);
 
   // 1. Initialize camera devices
   const enumerateCameras = useCallback(async () => {
@@ -308,23 +342,47 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
         onScanComplete(result);
       }
 
-      // Start cooldown countdown
-      const cooldownSec = settings.cooldownSeconds || 3;
-      setCooldownRemaining(cooldownSec);
+      // Auto-close feature: When scan succeeds and onClose is provided, close automatically!
+      if (result.success && onClose) {
+        setIsScanning(false);
+        setAutoCloseSeconds(2);
 
-      if (cooldownTimerRef.current) {
-        clearInterval(cooldownTimerRef.current);
-      }
+        if (autoCloseIntervalRef.current) clearInterval(autoCloseIntervalRef.current);
+        if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
 
-      cooldownTimerRef.current = setInterval(() => {
-        setCooldownRemaining(prev => {
-          if (prev <= 1) {
-            if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
-            return 0;
+        let countdown = 2;
+        autoCloseIntervalRef.current = setInterval(() => {
+          countdown -= 1;
+          if (countdown <= 0) {
+            if (autoCloseIntervalRef.current) clearInterval(autoCloseIntervalRef.current);
+            setAutoCloseSeconds(0);
+          } else {
+            setAutoCloseSeconds(countdown);
           }
-          return prev - 1;
-        });
-      }, 1000);
+        }, 1000);
+
+        autoCloseTimerRef.current = setTimeout(() => {
+          handleCloseSafely();
+        }, 2000);
+      } else {
+        // Start cooldown countdown for retry
+        const cooldownSec = settings.cooldownSeconds || 3;
+        setCooldownRemaining(cooldownSec);
+
+        if (cooldownTimerRef.current) {
+          clearInterval(cooldownTimerRef.current);
+        }
+
+        cooldownTimerRef.current = setInterval(() => {
+          setCooldownRemaining(prev => {
+            if (prev <= 1) {
+              if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
 
     } catch (err: any) {
       console.error('Scan submission error:', err);
@@ -366,6 +424,12 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
       if (cooldownTimerRef.current) {
         clearInterval(cooldownTimerRef.current);
       }
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+      }
+      if (autoCloseIntervalRef.current) {
+        clearInterval(autoCloseIntervalRef.current);
+      }
     };
   }, [startCamera, scanQrFrame]);
 
@@ -394,9 +458,23 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
       {/* Title & Guidance Header */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-2">
         <div className="space-y-1 text-center sm:text-left">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            {t.scannerTitle}
-          </h1>
+          <div className="flex items-center gap-3 justify-center sm:justify-start">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+              {t.scannerTitle}
+            </h1>
+            {onClose && (
+              <button
+                type="button"
+                id="btn-close-scanner-title"
+                onClick={handleCloseSafely}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
+                title={language === 'km' ? 'បិទការស្កេន ត្រឡប់ក្រោយ' : 'Close scanner & go back'}
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>{language === 'km' ? 'បិទ (មិនស្កេន)' : 'Close'}</span>
+              </button>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-slate-600 max-w-xl">
             {t.scannerSubtitle}
           </p>
@@ -416,6 +494,22 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
                   : `Geofence Active (${settings.officeLocation?.radiusMeters || 100}m)`}
               </span>
             </div>
+          )}
+
+          {/* Prominent Header Close Button */}
+          {onClose && (
+            <button
+              type="button"
+              id="btn-close-scanner-header"
+              onClick={handleCloseSafely}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold shadow-2xs transition-all cursor-pointer active:scale-95"
+              title={language === 'km' ? 'បិទប្រសិនបើមិនចង់ Scan' : 'Close scanner if you do not want to scan'}
+            >
+              <X className="w-4 h-4" />
+              <span>
+                {language === 'km' ? 'បិទការស្កេន' : 'Close Scanner'}
+              </span>
+            </button>
           )}
 
           {/* Open Office Management / Station QR Button */}
@@ -470,14 +564,14 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
             )}
           </div>
 
-          {/* Action Buttons: Sound, Torch, Camera Flip */}
+          {/* Action Buttons: Sound, Torch, Camera Flip & Direct Close Button */}
           <div className="flex items-center gap-2">
             
             {/* Audio Toggle */}
             <button
               id="btn-toggle-sound"
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 flex items-center justify-center transition-all"
+              className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 flex items-center justify-center transition-all cursor-pointer"
               title={soundEnabled ? t.audioEnabled : t.audioDisabled}
             >
               {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
@@ -488,7 +582,7 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
               <button
                 id="btn-toggle-torch"
                 onClick={toggleTorch}
-                className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 flex items-center justify-center transition-all"
+                className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 flex items-center justify-center transition-all cursor-pointer"
                 title={isTorchOn ? t.torchOff : t.torchOn}
               >
                 {isTorchOn ? <Flashlight className="w-4 h-4 text-amber-300" /> : <FlashlightOff className="w-4 h-4 text-slate-300" />}
@@ -499,11 +593,25 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
             <button
               id="btn-switch-camera"
               onClick={switchCamera}
-              className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 flex items-center justify-center transition-all"
+              className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 flex items-center justify-center transition-all cursor-pointer"
               title={facingMode === 'environment' ? t.frontCamera : t.backCamera}
             >
               <FlipHorizontal className="w-4 h-4 text-white" />
             </button>
+
+            {/* Direct Close Button on Camera Viewfinder */}
+            {onClose && (
+              <button
+                id="btn-close-camera-viewfinder"
+                type="button"
+                onClick={handleCloseSafely}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-500 backdrop-blur-md text-white text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer border border-rose-400/40 ml-1"
+                title={language === 'km' ? 'បិទប្រអប់ស្កេន' : 'Close Scan Box'}
+              >
+                <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="hidden xs:inline">{language === 'km' ? 'បិទ' : 'Close'}</span>
+              </button>
+            )}
 
           </div>
         </div>
@@ -571,6 +679,42 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
                 </div>
               )}
 
+              {/* Auto-closing Celebration Overlay inside the reticle */}
+              {scanResult?.success && autoCloseSeconds !== null && (
+                <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center text-white gap-2 p-3.5 pointer-events-auto z-20 text-center animate-in zoom-in-95 duration-200">
+                  <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/40 animate-bounce">
+                    <CheckCircle2 className="w-7 h-7 stroke-[2.5]" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-bold text-white block">
+                      {scanResult.action === 'check_in' 
+                        ? (language === 'km' ? 'កត់ត្រាវត្តមានចូលជោគជ័យ!' : 'Check-In Recorded!')
+                        : (language === 'km' ? 'កត់ត្រាវត្តមានចេញជោគជ័យ!' : 'Check-Out Recorded!')}
+                    </span>
+                    <span className="text-xs text-emerald-200 font-semibold block">
+                      {scanResult.fullName} ({scanResult.employeeId})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-900/90 border border-emerald-400/40 text-[11px] font-semibold text-emerald-200 mt-0.5">
+                    <Clock className="w-3 h-3 animate-spin text-emerald-300" />
+                    <span>
+                      {language === 'km' 
+                        ? `កំពុងបិទស្វ័យប្រវត្តិក្នង ${autoCloseSeconds}s...` 
+                        : `Auto-closing in ${autoCloseSeconds}s...`}
+                    </span>
+                  </div>
+                  {onClose && (
+                    <button
+                      type="button"
+                      onClick={handleCloseSafely}
+                      className="mt-1 px-3.5 py-1 bg-white hover:bg-emerald-50 text-emerald-950 font-bold text-xs rounded-full shadow transition-all cursor-pointer active:scale-95"
+                    >
+                      {language === 'km' ? 'បិទឥឡូវនេះ' : 'Close Now'}
+                    </button>
+                  )}
+                </div>
+              )}
+
             </div>
           </div>
 
@@ -630,6 +774,24 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
         )}
 
       </div>
+
+      {/* Quick Cancel & Not Scanning Button */}
+      {onClose && (
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <button
+            id="btn-cancel-scan-bottom"
+            type="button"
+            onClick={handleCloseSafely}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
+            title={language === 'km' ? 'បិទប្រសិនបើមិនចង់ Scan' : 'Close if you do not want to scan'}
+          >
+            <X className="w-4 h-4" />
+            <span>
+              {language === 'km' ? 'មិនចង់ Scan ទេ? ចុចទីនេះដើម្បីបិទ' : 'Do not want to scan? Click here to close'}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Visual Feedback Result Banner (Success / Error) */}
       {scanResult && (
@@ -695,6 +857,29 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
                   </div>
                 )}
 
+                {/* Auto Close status badge */}
+                {scanResult.success && autoCloseSeconds !== null && (
+                  <div className="mt-3 pt-2.5 border-t border-emerald-200/80 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-xs text-emerald-800 font-medium">
+                      <Clock className="w-4 h-4 text-emerald-600 animate-spin" />
+                      <span>
+                        {language === 'km' 
+                          ? `ប្រអប់ Scan នឹងបិទវិញស្វ័យប្រវត្តិក្នង ${autoCloseSeconds} វិនាទី...` 
+                          : `Scan box will close automatically in ${autoCloseSeconds}s...`}
+                      </span>
+                    </div>
+                    {onClose && (
+                      <button
+                        type="button"
+                        onClick={handleCloseSafely}
+                        className="text-xs font-bold text-emerald-950 bg-emerald-200 hover:bg-emerald-300 px-3 py-1 rounded-lg transition-colors cursor-pointer shadow-2xs active:scale-95"
+                      >
+                        {language === 'km' ? 'បិទឥឡូវនេះ' : 'Close Now'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Error Details */}
                 {!scanResult.success && (
                   <div className="space-y-1.5">
@@ -722,10 +907,17 @@ export const ScannerPage: React.FC<ScannerPageProps> = ({
             {/* Dismiss Button */}
             <button
               id="btn-dismiss-scan-result"
-              onClick={() => setScanResult(null)}
-              className={`p-1.5 rounded-lg hover:bg-black/5 transition-colors shrink-0 ${
+              onClick={() => {
+                if (scanResult.success && onClose) {
+                  handleCloseSafely();
+                } else {
+                  setScanResult(null);
+                }
+              }}
+              className={`p-1.5 rounded-lg hover:bg-black/5 transition-colors shrink-0 cursor-pointer ${
                 scanResult.success ? 'text-emerald-700' : 'text-rose-700'
               }`}
+              title={scanResult.success ? (language === 'km' ? 'បិទ' : 'Close') : (language === 'km' ? 'បិទសារ' : 'Dismiss')}
             >
               <X className="w-5 h-5" />
             </button>

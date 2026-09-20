@@ -352,6 +352,8 @@ export function getStoredEmployees(): Employee[] {
         employmentTypeKhmer: emp.employmentTypeKhmer || initialMatch?.employmentTypeKhmer,
         status: emp.status || initialMatch?.status,
         statusKhmer: emp.statusKhmer || initialMatch?.statusKhmer,
+        resignedDate: emp.resignedDate || initialMatch?.resignedDate,
+        resignationReason: emp.resignationReason || initialMatch?.resignationReason,
         nationalId: emp.nationalId || initialMatch?.nationalId,
         address: emp.address || initialMatch?.address,
         workLocation: emp.workLocation || initialMatch?.workLocation,

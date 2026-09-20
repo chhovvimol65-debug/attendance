@@ -162,6 +162,33 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
         {/* Scrollable Body Content */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-5 text-slate-800 text-sm">
           
+          {/* Resigned Employee Notice Banner */}
+          {employee.status === 'resigned' && (
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-rose-900 text-xs">
+              <UserX className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold text-sm text-rose-950">
+                  {language === 'km' ? 'បុគ្គលិកនេះបានឈប់ធ្វើការហើយ (Resigned / Terminated)' : 'Employee Has Resigned / Terminated'}
+                </p>
+                {employee.resignedDate && (
+                  <p>
+                    <span className="font-semibold text-rose-950">{t.resignedDateLabel}:</span> {employee.resignedDate}
+                  </p>
+                )}
+                {employee.resignationReason && (
+                  <p>
+                    <span className="font-semibold text-rose-950">{t.resignationReasonLabel}:</span> {employee.resignationReason}
+                  </p>
+                )}
+                <p className="text-[11px] text-rose-700 pt-0.5">
+                  {language === 'km' 
+                    ? 'បុគ្គលិកនេះត្រូវបានបិទមិនឱ្យស្កេនវត្តមានបានឡើយ ប៉ុន្តែកំណត់ត្រាវត្តមានចាស់ៗនៅតែរក្សាទុកដដែល។'
+                    : 'This employee is barred from scanning attendance. Historical records remain preserved.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Real-time Status Card */}
           <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -406,7 +433,7 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {canEdit && onEdit && (
               <button
                 id="btn-profile-edit"
@@ -414,17 +441,68 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
                   onClose();
                   onEdit(employee);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
               >
                 <Edit2 className="w-3.5 h-3.5 text-slate-500" />
                 <span>{t.editEmployee}</span>
               </button>
             )}
 
+            {/* Mark Resigned or Reactivate button */}
+            {canEdit && (
+              employee.status === 'resigned' ? (
+                onReactivate && (
+                  <button
+                    id="btn-profile-reactivate"
+                    onClick={() => {
+                      onClose();
+                      onReactivate(employee);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    title={t.rehireEmployee}
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>{t.rehireEmployee}</span>
+                  </button>
+                )
+              ) : (
+                onResign && (
+                  <button
+                    id="btn-profile-resign"
+                    onClick={() => {
+                      onClose();
+                      onResign(employee);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    title={t.markAsResigned}
+                  >
+                    <UserX className="w-3.5 h-3.5 text-amber-700" />
+                    <span>{t.markAsResigned}</span>
+                  </button>
+                )
+              )
+            )}
+
+            {/* Permanent Delete Button */}
+            {canEdit && onDelete && (
+              <button
+                id="btn-profile-delete"
+                onClick={() => {
+                  onClose();
+                  onDelete(employee);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                title={t.deleteEmployee}
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>{t.deleteEmployee}</span>
+              </button>
+            )}
+
             <button
               id="btn-profile-close-bottom"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
             >
               {language === 'km' ? 'បិទ' : 'Close'}
             </button>

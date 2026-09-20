@@ -17,6 +17,9 @@ import {
   Shield, 
   Briefcase, 
   UserCheck, 
+  UserX,
+  UserMinus,
+  AlertTriangle,
   Building2,
   Eye,
   LayoutGrid,
@@ -55,12 +58,25 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedRoleType, setSelectedRoleType] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned' | 'on_leave'>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
 
   // Modal states
   const [activeBadgeEmployee, setActiveBadgeEmployee] = useState<Employee | null>(null);
   const [detailedProfileEmployee, setDetailedProfileEmployee] = useState<Employee | null>(null);
   const [badgeQrDataUrl, setBadgeQrDataUrl] = useState<string>('');
+
+  // Resignation Modal state
+  const [resigningEmployee, setResigningEmployee] = useState<Employee | null>(null);
+  const [resignationDate, setResignationDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [resignationReason, setResignationReason] = useState<string>('លាលែងពីតំណែងផ្ទាល់ខ្លួន');
+
+  // Permanent Delete Modal state
+  const [deletingEmployee, setDeletingEmployee] = useState<Employee | null>(null);
+  const [deleteCascadeRecords, setDeleteCascadeRecords] = useState<boolean>(false);
+
+  // Toast feedback notification
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Add/Edit Employee Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -86,6 +102,9 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     employmentType: EmploymentType;
     employmentTypeKhmer: string;
     status: EmploymentStatus;
+    statusKhmer?: string;
+    resignedDate?: string;
+    resignationReason?: string;
     nationalId: string;
     address: string;
     workLocation: string;
@@ -118,6 +137,9 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     employmentType: 'full_time',
     employmentTypeKhmer: 'ពេញម៉ោង',
     status: 'active',
+    statusKhmer: 'កំពុងបម្រើការ',
+    resignedDate: '',
+    resignationReason: '',
     nationalId: '',
     address: '',
     workLocation: 'Phnom Penh HQ',
@@ -234,6 +256,8 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
       employmentType: emp.employmentType || 'full_time',
       employmentTypeKhmer: emp.employmentTypeKhmer || 'ពេញម៉ោង',
       status: emp.status || 'active',
+      resignedDate: emp.resignedDate || '',
+      resignationReason: emp.resignationReason || '',
       nationalId: emp.nationalId || '',
       address: emp.address || '',
       workLocation: emp.workLocation || 'Phnom Penh HQ',
@@ -260,6 +284,14 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     let updatedList: Employee[];
     const avatar = editingEmployee?.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`;
 
+    const statusKhmer = formData.status === 'resigned' 
+      ? 'ឈប់ធ្វើការ' 
+      : formData.status === 'on_leave' 
+        ? 'ច្បាប់សម្រាក' 
+        : formData.status === 'probation'
+          ? 'សាកល្បង'
+          : 'សកម្ម';
+
     if (editingEmployee) {
       updatedList = employees.map(emp => 
         emp.id === editingEmployee.id 
@@ -281,6 +313,9 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
               employmentType: formData.employmentType,
               employmentTypeKhmer: formData.employmentTypeKhmer,
               status: formData.status,
+              statusKhmer,
+              resignedDate: formData.status === 'resigned' ? (formData.resignedDate || new Date().toISOString().split('T')[0]) : undefined,
+              resignationReason: formData.status === 'resigned' ? (formData.resignationReason || '') : undefined,
               nationalId: formData.nationalId,
               address: formData.address,
               workLocation: formData.workLocation,
@@ -318,6 +353,9 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
         employmentType: formData.employmentType,
         employmentTypeKhmer: formData.employmentTypeKhmer,
         status: formData.status,
+        statusKhmer,
+        resignedDate: formData.status === 'resigned' ? (formData.resignedDate || new Date().toISOString().split('T')[0]) : undefined,
+        resignationReason: formData.status === 'resigned' ? (formData.resignationReason || '') : undefined,
         nationalId: formData.nationalId,
         address: formData.address,
         workLocation: formData.workLocation,
@@ -339,19 +377,116 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     setEmployees(updatedList);
     saveStoredEmployees(updatedList);
     setIsAddModalOpen(false);
+    setToastMessage(language === 'km' ? 'បានរក្សាទុកព័ត៌មានបុគ្គលិកដោយជោគជ័យ' : 'Employee information saved successfully');
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Delete Employee (Admin only)
-  const handleDeleteEmployee = (empId: string, empName: string) => {
-    if (confirm(`${t.confirmDeleteEmp}\n\n${empName} (${empId})`)) {
-      const updated = employees.filter(e => e.id !== empId);
-      setEmployees(updated);
-      saveStoredEmployees(updated);
+  // Open Resignation Modal (Admin & Manager)
+  const handleOpenResignModal = (emp: Employee) => {
+    setResigningEmployee(emp);
+    setResignationDate(emp.resignedDate || new Date().toISOString().split('T')[0]);
+    setResignationReason(emp.resignationReason || (language === 'km' ? 'លាលែងពីតំណែងផ្ទាល់ខ្លួន' : 'Personal Resignation'));
+  };
+
+  // Confirm Resignation
+  const handleConfirmResign = () => {
+    if (!resigningEmployee) return;
+    const targetId = resigningEmployee.id;
+    const targetName = language === 'km' ? (resigningEmployee.fullNameKhmer || resigningEmployee.fullName) : resigningEmployee.fullName;
+
+    const updated = employees.map(emp => {
+      if (emp.id === targetId) {
+        return {
+          ...emp,
+          status: 'resigned' as EmploymentStatus,
+          statusKhmer: 'ឈប់ធ្វើការ',
+          resignedDate: resignationDate || new Date().toISOString().split('T')[0],
+          resignationReason: resignationReason || (language === 'km' ? 'លាលែងពីតំណែងផ្ទាល់ខ្លួន' : 'Personal Resignation')
+        };
+      }
+      return emp;
+    });
+
+    setEmployees(updated);
+    saveStoredEmployees(updated);
+    setResigningEmployee(null);
+    setToastMessage(language === 'km' ? `បានកត់ត្រាការឈប់ធ្វើការរបស់ ${targetName} ដោយជោគជ័យ` : `Successfully marked ${targetName} as resigned`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Reactivate Resigned Employee
+  const handleReactivateEmployee = (emp: Employee) => {
+    const targetName = language === 'km' ? (emp.fullNameKhmer || emp.fullName) : emp.fullName;
+    const updated = employees.map(e => {
+      if (e.id === emp.id) {
+        return {
+          ...e,
+          status: 'active' as EmploymentStatus,
+          statusKhmer: 'សកម្ម',
+          resignedDate: undefined,
+          resignationReason: undefined
+        };
+      }
+      return e;
+    });
+
+    setEmployees(updated);
+    saveStoredEmployees(updated);
+    setToastMessage(language === 'km' ? `បានដំណើរការបុគ្គលិក ${targetName} ឡើងវិញដោយជោគជ័យ` : `Successfully reactivated ${targetName}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Open Permanent Delete Modal (Admin only)
+  const handleOpenDeleteModal = (emp: Employee) => {
+    setDeletingEmployee(emp);
+    setDeleteCascadeRecords(false);
+  };
+
+  // Confirm Permanent Deletion
+  const handleConfirmPermanentDelete = () => {
+    if (!deletingEmployee) return;
+    const targetId = deletingEmployee.id;
+    const targetName = language === 'km' ? (deletingEmployee.fullNameKhmer || deletingEmployee.fullName) : deletingEmployee.fullName;
+
+    const updated = employees.filter(e => e.id !== targetId);
+    setEmployees(updated);
+    saveStoredEmployees(updated);
+
+    if (deleteCascadeRecords && typeof window !== 'undefined') {
+      try {
+        const rawRecs = localStorage.getItem('company_attendance_records');
+        if (rawRecs) {
+          const parsed: AttendanceRecord[] = JSON.parse(rawRecs);
+          const filtered = parsed.filter(r => r.employeeId !== targetId);
+          localStorage.setItem('company_attendance_records', JSON.stringify(filtered));
+          window.dispatchEvent(new Event('attendance-records-updated'));
+        }
+      } catch (err) {
+        console.error(err);
+      }
     }
+
+    setDeletingEmployee(null);
+    setToastMessage(language === 'km' ? `បានលុបបុគ្គលិក ${targetName} (${targetId}) ចេញពីប្រព័ន្ធដោយជោគជ័យ` : `Successfully deleted employee ${targetName} (${targetId})`);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   const isManager = currentUser?.role === 'manager';
+  const isAdmin = currentUser.role === 'admin';
+  const canManageEmployees = isAdmin || isManager;
   const managerDept = currentUser?.department;
+
+  const statusCounts = useMemo(() => {
+    const activeCount = employees.filter(e => e.status !== 'resigned' && e.status !== 'on_leave').length;
+    const resignedCount = employees.filter(e => e.status === 'resigned').length;
+    const onLeaveCount = employees.filter(e => e.status === 'on_leave').length;
+    return {
+      all: employees.length,
+      active: activeCount,
+      resigned: resignedCount,
+      onLeave: onLeaveCount
+    };
+  }, [employees]);
 
   const selectedDeptObj = useMemo<Department | null>(() => {
     if (selectedDept === 'all') return null;
@@ -360,6 +495,11 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
 
   // Filter employees
   const filteredEmployees = employees.filter(emp => {
+    // Employment Status filter
+    if (statusFilter === 'active' && (emp.status === 'resigned' || emp.status === 'on_leave')) return false;
+    if (statusFilter === 'resigned' && emp.status !== 'resigned') return false;
+    if (statusFilter === 'on_leave' && emp.status !== 'on_leave') return false;
+
     // Manager department scope constraint
     if (isManager && managerDept) {
       if (!emp.department.toLowerCase().includes(managerDept.toLowerCase()) && 
@@ -405,8 +545,6 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     a.click();
     document.body.removeChild(a);
   };
-
-  const isAdmin = currentUser.role === 'admin';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
@@ -469,6 +607,87 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
           </span>
         </div>
       )}
+
+      {/* Employment Status Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <button
+          id="tab-filter-status-all"
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            statusFilter === 'all'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>{language === 'km' ? 'ទាំងអស់' : 'All Staff'}</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'all' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {statusCounts.all}
+          </span>
+        </button>
+
+        <button
+          id="tab-filter-status-active"
+          type="button"
+          onClick={() => setStatusFilter('active')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            statusFilter === 'active'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span>{language === 'km' ? 'កំពុងបម្រើការ' : 'Active'}</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'active' ? 'bg-emerald-700 text-emerald-100' : 'bg-emerald-50 text-emerald-700'
+          }`}>
+            {statusCounts.active}
+          </span>
+        </button>
+
+        <button
+          id="tab-filter-status-resigned"
+          type="button"
+          onClick={() => setStatusFilter('resigned')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            statusFilter === 'resigned'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-rose-50 border border-slate-200'
+          }`}
+        >
+          <UserX className="w-3.5 h-3.5 text-rose-500" />
+          <span>{language === 'km' ? 'ឈប់ធ្វើការ' : 'Resigned / Terminated'}</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'resigned' ? 'bg-rose-700 text-rose-100' : 'bg-rose-100 text-rose-700'
+          }`}>
+            {statusCounts.resigned}
+          </span>
+        </button>
+
+        {statusCounts.onLeave > 0 && (
+          <button
+            id="tab-filter-status-onleave"
+            type="button"
+            onClick={() => setStatusFilter('on_leave')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              statusFilter === 'on_leave'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
+            <span>{language === 'km' ? 'ច្បាប់សម្រាក' : 'On Leave'}</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              statusFilter === 'on_leave' ? 'bg-amber-700 text-amber-100' : 'bg-amber-100 text-amber-800'
+            }`}>
+              {statusCounts.onLeave}
+            </span>
+          </button>
+        )}
+      </div>
 
       {/* Filter Toolbar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center gap-3">
@@ -603,9 +822,16 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                       }`}>
                         {roleType}
                       </span>
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {typeDisplay}
-                      </span>
+                      {emp.status === 'resigned' ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1">
+                          <UserX className="w-3 h-3 text-rose-600" />
+                          <span>{language === 'km' ? 'ឈប់ធ្វើការ' : 'Resigned'}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {typeDisplay}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -635,6 +861,21 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     <p className="text-xs text-slate-500">
                       {language === 'km' ? emp.departmentKhmer : emp.department}
                     </p>
+
+                    {/* Resigned details tag */}
+                    {emp.status === 'resigned' && (
+                      <div className="mt-2.5 p-2 bg-rose-50 border border-rose-200/80 rounded-xl text-[11px] text-rose-800 space-y-0.5">
+                        <div className="font-semibold flex items-center gap-1 text-rose-900">
+                          <UserX className="w-3 h-3 text-rose-600 shrink-0" />
+                          <span>{language === 'km' ? `ឈប់ត្រឹម: ${emp.resignedDate || 'មិនបានបញ្ជាក់'}` : `Resigned: ${emp.resignedDate || 'N/A'}`}</span>
+                        </div>
+                        {emp.resignationReason && (
+                          <p className="text-[10px] text-rose-600 truncate" title={emp.resignationReason}>
+                            {emp.resignationReason}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Rich Profile Details Snippet */}
@@ -697,25 +938,53 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     </button>
                   </div>
 
-                  {/* Admin Management Actions: Edit / Delete */}
-                  {isAdmin && (
-                    <div className="flex items-center justify-end gap-1 pt-1">
-                      <button
-                        id={`btn-edit-emp-${emp.id}`}
-                        onClick={() => handleOpenEditModal(emp)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg text-xs transition-colors"
-                        title={t.editEmployee}
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        id={`btn-delete-emp-${emp.id}`}
-                        onClick={() => handleDeleteEmployee(emp.id, emp.fullName)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs transition-colors"
-                        title={t.deleteEmployee}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                  {/* Management Actions: Edit / Resign / Reactivate / Delete */}
+                  {canManageEmployees && (
+                    <div className="flex items-center justify-between gap-1 pt-2 border-t border-slate-100 mt-2">
+                      <div className="flex items-center gap-1">
+                        {emp.status === 'resigned' ? (
+                          <button
+                            id={`btn-reactivate-emp-${emp.id}`}
+                            onClick={() => handleReactivateEmployee(emp)}
+                            className="flex items-center gap-1 px-2 py-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
+                            title={t.rehireEmployee}
+                          >
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{language === 'km' ? 'ចូលធ្វើការវិញ' : 'Rehire'}</span>
+                          </button>
+                        ) : (
+                          <button
+                            id={`btn-resign-emp-${emp.id}`}
+                            onClick={() => handleOpenResignModal(emp)}
+                            className="flex items-center gap-1 px-2 py-1 text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
+                            title={language === 'km' ? 'កំណត់ថាឈប់ធ្វើការ' : 'Mark as Resigned'}
+                          >
+                            <UserX className="w-3.5 h-3.5 text-amber-700" />
+                            <span>{language === 'km' ? 'ឈប់ធ្វើការ' : 'Resign'}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          id={`btn-edit-emp-${emp.id}`}
+                          onClick={() => handleOpenEditModal(emp)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg text-xs transition-colors cursor-pointer"
+                          title={t.editEmployee}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {isAdmin && (
+                          <button
+                            id={`btn-delete-emp-${emp.id}`}
+                            onClick={() => handleOpenDeleteModal(emp)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs transition-colors cursor-pointer"
+                            title={language === 'km' ? 'លុបបុគ្គលិកជាអចិន្ត្រៃយ៍' : 'Delete Employee'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -815,22 +1084,29 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
 
                       {/* Today Status */}
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                          status === 'checked_in'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : status === 'checked_out'
-                              ? 'bg-indigo-100 text-indigo-800'
-                              : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            status === 'checked_in' ? 'bg-emerald-600' : status === 'checked_out' ? 'bg-indigo-600' : 'bg-slate-400'
-                          }`} />
-                          {status === 'checked_in' 
-                            ? (language === 'km' ? 'មានវត្តមាន' : 'In') 
-                            : status === 'checked_out' 
-                              ? (language === 'km' ? 'បានចេញ' : 'Out') 
-                              : (language === 'km' ? 'អវត្តមាន' : 'Absent')}
-                        </span>
+                        {emp.status === 'resigned' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            <UserX className="w-3 h-3 text-rose-600" />
+                            {language === 'km' ? 'ឈប់ធ្វើការ' : 'Resigned'}
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            status === 'checked_in'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : status === 'checked_out'
+                                ? 'bg-indigo-100 text-indigo-800'
+                                : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              status === 'checked_in' ? 'bg-emerald-600' : status === 'checked_out' ? 'bg-indigo-600' : 'bg-slate-400'
+                            }`} />
+                            {status === 'checked_in' 
+                              ? (language === 'km' ? 'មានវត្តមាន' : 'In') 
+                              : status === 'checked_out' 
+                                ? (language === 'km' ? 'បានចេញ' : 'Out') 
+                                : (language === 'km' ? 'អវត្តមាន' : 'Absent')}
+                          </span>
+                        )}
                       </td>
 
                       {/* Action Buttons */}
@@ -840,7 +1116,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                           <button
                             id={`btn-table-profile-${emp.id}`}
                             onClick={() => setDetailedProfileEmployee(emp)}
-                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
                             title={t.viewFullProfile}
                           >
                             <Eye className="w-4 h-4" />
@@ -850,7 +1126,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                           <button
                             id={`btn-table-badge-${emp.id}`}
                             onClick={() => setActiveBadgeEmployee(emp)}
-                            className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                             title={t.viewBadge}
                           >
                             <QrCode className="w-4 h-4" />
@@ -860,31 +1136,54 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                           <button
                             id={`btn-table-scan-${emp.id}`}
                             onClick={() => onSimulateScan(emp.id)}
-                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                             title="Simulate Scan"
                           >
                             <Sparkles className="w-4 h-4" />
                           </button>
 
-                          {/* Admin Edit/Delete */}
-                          {isAdmin && (
+                          {/* Management Actions: Edit / Resign / Reactivate / Delete */}
+                          {canManageEmployees && (
                             <>
+                              {emp.status === 'resigned' ? (
+                                <button
+                                  id={`btn-table-reactivate-${emp.id}`}
+                                  onClick={() => handleReactivateEmployee(emp)}
+                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                  title={t.rehireEmployee}
+                                >
+                                  <UserCheck className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  id={`btn-table-resign-${emp.id}`}
+                                  onClick={() => handleOpenResignModal(emp)}
+                                  className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                  title={language === 'km' ? 'កំណត់ថាឈប់ធ្វើការ' : 'Mark as Resigned'}
+                                >
+                                  <UserX className="w-4 h-4" />
+                                </button>
+                              )}
+
                               <button
                                 id={`btn-table-edit-${emp.id}`}
                                 onClick={() => handleOpenEditModal(emp)}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                                 title={t.editEmployee}
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                id={`btn-table-delete-${emp.id}`}
-                                onClick={() => handleDeleteEmployee(emp.id, emp.fullName)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                title={t.deleteEmployee}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+
+                              {isAdmin && (
+                                <button
+                                  id={`btn-table-delete-${emp.id}`}
+                                  onClick={() => handleOpenDeleteModal(emp)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  title={language === 'km' ? 'លុបបុគ្គលិកជាអចិន្ត្រៃយ៍' : 'Delete Employee'}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
@@ -983,7 +1282,19 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
         onEdit={(emp) => {
           handleOpenEditModal(emp);
         }}
-        canEdit={isAdmin}
+        onResign={(emp) => {
+          setDetailedProfileEmployee(null);
+          handleOpenResignModal(emp);
+        }}
+        onReactivate={(emp) => {
+          handleReactivateEmployee(emp);
+          setDetailedProfileEmployee(null);
+        }}
+        onDelete={(emp) => {
+          setDetailedProfileEmployee(null);
+          handleOpenDeleteModal(emp);
+        }}
+        canEdit={canManageEmployees}
       />
 
       {/* Modal: Add or Edit Employee (Admin Only) */}
@@ -1300,6 +1611,96 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                           <option value="part_time">{t.partTime}</option>
                         </select>
                       </div>
+                    </div>
+
+                    {/* Employment Status & Resignation fields */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        {language === 'km' ? 'ស្ថានភាពបុគ្គលិក' : 'Employment Status'}
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          formData.status === 'active' 
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' 
+                            : 'bg-white border-slate-200 text-slate-700'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="employee-form-status"
+                            value="active"
+                            checked={formData.status === 'active'}
+                            onChange={() => setFormData({ ...formData, status: 'active', statusKhmer: 'កំពុងបម្រើការ' })}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className="text-xs">{language === 'km' ? 'កំពុងបម្រើការ' : 'Active'}</span>
+                        </label>
+
+                        <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          formData.status === 'resigned' 
+                            ? 'bg-rose-50 border-rose-300 text-rose-900 font-bold' 
+                            : 'bg-white border-slate-200 text-slate-700'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="employee-form-status"
+                            value="resigned"
+                            checked={formData.status === 'resigned'}
+                            onChange={() => setFormData({ 
+                              ...formData, 
+                              status: 'resigned', 
+                              statusKhmer: 'ឈប់ធ្វើការ',
+                              resignedDate: formData.resignedDate || new Date().toISOString().split('T')[0]
+                            })}
+                            className="text-rose-600 focus:ring-rose-500"
+                          />
+                          <span className="text-xs">{language === 'km' ? 'ឈប់ធ្វើការ' : 'Resigned'}</span>
+                        </label>
+
+                        <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          formData.status === 'on_leave' 
+                            ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold' 
+                            : 'bg-white border-slate-200 text-slate-700'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="employee-form-status"
+                            value="on_leave"
+                            checked={formData.status === 'on_leave'}
+                            onChange={() => setFormData({ ...formData, status: 'on_leave', statusKhmer: 'ច្បាប់សម្រាក' })}
+                            className="text-amber-600 focus:ring-amber-500"
+                          />
+                          <span className="text-xs">{language === 'km' ? 'ច្បាប់សម្រាក' : 'On Leave'}</span>
+                        </label>
+                      </div>
+
+                      {/* If resigned, show resignation details */}
+                      {formData.status === 'resigned' && (
+                        <div className="pt-2.5 border-t border-rose-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5 animate-in fade-in">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-rose-800 mb-1">
+                              {language === 'km' ? 'កាលបរិច្ឆេទឈប់ធ្វើការ' : 'Resignation Date'}
+                            </label>
+                            <input
+                              type="date"
+                              value={formData.resignedDate || ''}
+                              onChange={(e) => setFormData({ ...formData, resignedDate: e.target.value })}
+                              className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-xl text-xs text-rose-900 focus:ring-2 focus:ring-rose-400 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-rose-800 mb-1">
+                              {language === 'km' ? 'មូលហេតុឈប់ធ្វើការ' : 'Reason for Resignation'}
+                            </label>
+                            <input
+                              type="text"
+                              placeholder={language === 'km' ? 'ឧ. ប្តូរការងារ, ផ្លាស់ប្តូរទីលំនៅ...' : 'e.g. Career change, relocation...'}
+                              value={formData.resignationReason || ''}
+                              onChange={(e) => setFormData({ ...formData, resignationReason: e.target.value })}
+                              className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-xl text-xs text-rose-900 focus:ring-2 focus:ring-rose-400 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Join Date & Work Schedule */}
@@ -1628,6 +2029,245 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
             </form>
 
           </div>
+        </div>
+      )}
+
+      {/* Modal: Mark Employee as Resigned */}
+      {resigningEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-amber-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                  <UserX className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {language === 'km' ? 'កត់ត្រាបុគ្គលិកឈប់ធ្វើការ' : 'Record Employee Resignation'}
+                  </h3>
+                  <p className="text-slate-500 text-xs font-mono">
+                    {resigningEmployee.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                id="btn-close-resign-modal"
+                onClick={() => setResigningEmployee(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/60 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              {/* Target employee card summary */}
+              <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                <img
+                  src={resigningEmployee.avatar}
+                  alt={resigningEmployee.fullName}
+                  className="w-11 h-11 rounded-xl object-cover border border-slate-200"
+                  referrerPolicy="no-referrer"
+                />
+                <div>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {language === 'km' ? resigningEmployee.fullNameKhmer : resigningEmployee.fullName}
+                  </p>
+                  <p className="text-slate-500 text-[11px]">
+                    {language === 'km' ? resigningEmployee.roleKhmer : resigningEmployee.role} • {language === 'km' ? resigningEmployee.departmentKhmer : resigningEmployee.department}
+                  </p>
+                </div>
+              </div>
+
+              {/* Policy note */}
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 space-y-1">
+                <p className="font-semibold text-[11px] flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  {language === 'km' ? 'ប្រសិទ្ធភាពនៃការកំណត់ឈប់ធ្វើការ:' : 'Resignation Impact:'}
+                </p>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
+                  <li>{language === 'km' ? 'ប្រព័ន្ធស្កេនវត្តមាននឹងបដិសេធការស្កេនរបស់បុគ្គលិកនេះដោយស្វ័យប្រវត្តិ។' : 'Scanner will immediately reject attendance scans for this employee.'}</li>
+                  <li>{language === 'km' ? 'ប្រវត្តិនៃការចុះវត្តមានកន្លងមកនឹងត្រូវរក្សាទុកដដែល មិនបាត់បង់ឡើយ។' : 'All historical attendance records will remain preserved for audit.'}</li>
+                  <li>{language === 'km' ? 'អ្នកអាចដំណើរការបុគ្គលិកនេះឡើងវិញ (Rehire) បានគ្រប់ពេលវេលា។' : 'You can reactivate / rehire this employee at any time with one click.'}</li>
+                </ul>
+              </div>
+
+              {/* Resignation Date */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {language === 'km' ? 'កាលបរិច្ឆេទឈប់ធ្វើការ' : 'Effective Resignation Date'}
+                </label>
+                <input
+                  id="input-resign-date"
+                  type="date"
+                  value={resignationDate}
+                  onChange={(e) => setResignationDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Resignation Reason */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {language === 'km' ? 'មូលហេតុនៃការឈប់' : 'Reason for Resignation'}
+                </label>
+                <input
+                  id="input-resign-reason"
+                  type="text"
+                  placeholder={language === 'km' ? 'ឧ. លាលែងផ្ទាល់ខ្លួន, ប្តូរការងារ...' : 'e.g. Personal resignation, contract ended...'}
+                  value={resignationReason}
+                  onChange={(e) => setResignationReason(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+
+                {/* Quick reason suggestions */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[
+                    language === 'km' ? 'លាលែងផ្ទាល់ខ្លួន' : 'Personal Resignation',
+                    language === 'km' ? 'ចប់កិច្ចសន្យាការងារ' : 'Contract Ended',
+                    language === 'km' ? 'ប្តូរទៅកន្លែងការងារថ្មី' : 'Career Transition',
+                    language === 'km' ? 'ផ្លាស់ប្តូរទីលំនៅ' : 'Relocation'
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setResignationReason(preset)}
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md text-[10px] transition-colors cursor-pointer"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                id="btn-cancel-resign"
+                type="button"
+                onClick={() => setResigningEmployee(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                {language === 'km' ? 'បោះបង់' : 'Cancel'}
+              </button>
+              <button
+                id="btn-confirm-resign"
+                type="button"
+                onClick={handleConfirmResign}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <UserX className="w-3.5 h-3.5" />
+                <span>{language === 'km' ? 'យល់ព្រម កត់ត្រាឈប់' : 'Confirm Resignation'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Permanent Delete Employee (Admin Only) */}
+      {deletingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {language === 'km' ? 'លុបបុគ្គលិកជាអចិន្ត្រៃយ៍' : 'Delete Employee Permanently'}
+                  </h3>
+                  <p className="text-rose-600 text-xs font-mono font-bold">
+                    {deletingEmployee.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                id="btn-close-delete-modal"
+                onClick={() => setDeletingEmployee(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/60 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                <img
+                  src={deletingEmployee.avatar}
+                  alt={deletingEmployee.fullName}
+                  className="w-11 h-11 rounded-xl object-cover border border-slate-200"
+                  referrerPolicy="no-referrer"
+                />
+                <div>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {language === 'km' ? deletingEmployee.fullNameKhmer : deletingEmployee.fullName}
+                  </p>
+                  <p className="text-slate-500 text-[11px]">
+                    {language === 'km' ? deletingEmployee.roleKhmer : deletingEmployee.role}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-[11px] leading-relaxed">
+                <p className="font-bold mb-1 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  {language === 'km' ? 'ការព្រមានសំខាន់:' : 'Warning:'}
+                </p>
+                {language === 'km'
+                  ? 'ព័ត៌មានបុគ្គលិកនេះនឹងត្រូវលុបចេញពីប្រព័ន្ធទាំងស្រុង។ ប្រសិនបើបុគ្គលិកគ្រាន់តែឈប់ធ្វើការ យើងសូមណែនាំឱ្យប្រើមុខងារ "ឈប់ធ្វើការ (Resign)" ជំនួសវិញ ដើម្បីរក្សាទុកប្រវត្តិការងារ។'
+                  : 'This employee profile will be completely purged. If the employee merely resigned, consider using "Mark as Resigned" instead to preserve attendance history.'}
+              </div>
+
+              {/* Cascade attendance delete option */}
+              <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/60 cursor-pointer hover:bg-slate-100 transition-colors">
+                <input
+                  id="checkbox-cascade-records"
+                  type="checkbox"
+                  checked={deleteCascadeRecords}
+                  onChange={(e) => setDeleteCascadeRecords(e.target.checked)}
+                  className="mt-0.5 rounded text-rose-600 focus:ring-rose-500"
+                />
+                <div>
+                  <p className="font-semibold text-slate-800 text-xs">
+                    {language === 'km' ? 'លុបកំណត់ត្រាវត្តមានទាំងអស់របស់បុគ្គលិកនេះផងដែរ' : 'Also cascade delete all attendance records for this employee'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    {language === 'km' ? 'បើគូសយក កំណត់ត្រាវត្តមានពីមុនទាំងអស់នឹងត្រូវលុបចោលទាំងស្រុង' : 'If checked, all previous scan history for this employee will be purged'}
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                id="btn-cancel-delete"
+                type="button"
+                onClick={() => setDeletingEmployee(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                {language === 'km' ? 'បោះបង់' : 'Cancel'}
+              </button>
+              <button
+                id="btn-confirm-delete"
+                type="button"
+                onClick={handleConfirmPermanentDelete}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{language === 'km' ? 'លុបជាអចិន្ត្រៃយ៍' : 'Delete Permanently'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-800 text-xs animate-in slide-in-from-bottom-2 fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="font-medium">{toastMessage}</span>
         </div>
       )}
 

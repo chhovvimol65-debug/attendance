@@ -11,10 +11,7 @@ import {
   Layers,
   FileSpreadsheet,
   Building2,
-  Shield,
-  ShieldCheck,
-  Lock,
-  UserCheck
+  Shield
 } from 'lucide-react';
 import { Language, AttendanceRecord, UserAccount, Department } from '../types';
 import { translations } from '../i18n/translations';
@@ -81,12 +78,8 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
       .filter((r) => {
         const emp = storedEmployees.find(e => e.id === r.employeeId);
 
-        // Staff role: Strictly restricted to their own personal records only
-        if (isStaff) {
-          if (currentUser?.employeeId && r.employeeId !== currentUser.employeeId) {
-            return false;
-          }
-        } else if (staffOnlyFilter && currentUser?.employeeId && r.employeeId !== currentUser.employeeId) {
+        // Staff self filter
+        if (staffOnlyFilter && currentUser?.employeeId && r.employeeId !== currentUser.employeeId) {
           return false;
         }
 
@@ -163,10 +156,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    const filenamePrefix = isStaff && currentUser?.employeeId 
-      ? `my_attendance_${currentUser.employeeId}` 
-      : 'attendance_export';
-    link.setAttribute('download', `${filenamePrefix}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `attendance_export_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -185,16 +175,10 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            {isStaff 
-              ? (language === 'km' ? 'កំណត់ត្រាវត្តមានផ្ទាល់ខ្លួន' : 'My Attendance History')
-              : t.historyTitle}
+            {t.historyTitle}
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            {isStaff
-              ? (language === 'km' 
-                  ? `ប្រវត្តិនៃការស្កេនវត្តមានរបស់លោកអ្នក (អត្តលេខ៖ ${currentUser?.employeeId})` 
-                  : `Personal scan log history for ${currentUser?.name} (${currentUser?.employeeId})`)
-              : t.historySubtitle}
+            {t.historySubtitle}
           </p>
         </div>
 
@@ -203,10 +187,10 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
             id="btn-export-csv"
             onClick={handleExportCsv}
             disabled={filteredRecords.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-semibold shadow-sm transition-all active:scale-95"
           >
             <Download className="w-4 h-4" />
-            <span>{isStaff ? (language === 'km' ? 'ទាញយកកំណត់ត្រារបស់ខ្ញុំ (CSV)' : 'Export My Records') : t.exportCsv}</span>
+            <span>{t.exportCsv}</span>
           </button>
 
           {isAdmin ? (
@@ -214,49 +198,45 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
               id="btn-clear-logs"
               onClick={handleClearWithPrompt}
               disabled={records.length === 0}
-              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 disabled:opacity-40 border border-slate-200 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 disabled:opacity-40 border border-slate-200 rounded-xl text-sm font-medium transition-colors"
               title={t.clearLogs}
             >
               <Trash2 className="w-4 h-4" />
             </button>
-          ) : isManager ? (
+          ) : (
             <div 
               className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-medium text-slate-400 cursor-not-allowed hidden sm:block"
               title={t.adminOnlyClear}
             >
               Admin Clear Only
             </div>
-          ) : null}
+          )}
         </div>
       </div>
 
-      {/* Staff Role Access Notice: Explicitly indicating personal records only */}
+      {/* Staff Self Filter Switch if Staff */}
       {isStaff && (
-        <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">
-          <div className="flex items-center gap-2.5 text-emerald-950">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <ShieldCheck className="w-4.5 h-4.5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-emerald-950 text-xs">
-                  {language === 'km' ? 'កម្រិតសិទ្ធិបុគ្គលិក (Staff Role Permissions)' : 'Staff Role Privacy & Security Scope'}
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-extrabold text-[10px] uppercase">
-                  {currentUser?.employeeId}
-                </span>
-              </div>
-              <p className="text-emerald-800 text-[11px] mt-0.5">
-                {language === 'km' 
-                  ? `លោកអ្នកអាចមើលបានតែកំណត់ត្រាវត្តមានផ្ទាល់ខ្លួនប៉ុណ្ណោះ។ ទិន្នន័យបុគ្គលិកដទៃទៀតត្រូវបានរឹតបន្តឹងដោយសុវត្ថិភាព។` 
-                  : `You are authorized to view and export only your own personal attendance records. All other employees' data is secured.`}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-emerald-200 text-emerald-800 font-bold text-xs shrink-0 shadow-2xs">
-            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>{filteredRecords.length} {language === 'km' ? 'កំណត់ត្រាផ្ទាល់ខ្លួន' : 'Personal Records'}</span>
-          </div>
+        <div className="flex items-center gap-2 bg-indigo-50/60 p-2.5 rounded-2xl border border-indigo-100">
+          <button
+            onClick={() => setStaffOnlyFilter(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              staffOnlyFilter 
+                ? 'bg-indigo-600 text-white shadow-xs' 
+                : 'text-indigo-700 hover:bg-indigo-100/60'
+            }`}
+          >
+            My Records ({currentUser?.employeeId})
+          </button>
+          <button
+            onClick={() => setStaffOnlyFilter(false)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              !staffOnlyFilter 
+                ? 'bg-indigo-600 text-white shadow-xs' 
+                : 'text-indigo-700 hover:bg-indigo-100/60'
+            }`}
+          >
+            All Company Records
+          </button>
         </div>
       )}
 

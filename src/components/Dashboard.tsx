@@ -360,7 +360,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       </div>
 
-      {/* Monthly Report: Summary of Total Hours Worked by Department using Recharts Bar Chart */}
+      {/* Monthly Report: Summary of Total Attendance, Late Arrivals, and Absent Days per Department using Bar Chart */}
       <MonthlyReport
         records={records}
         departments={configuredDepartments}

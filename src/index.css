@@ -2,34 +2,34 @@
 
 @layer base {
   :root {
-    --font-khmer: 'Khmer OS Battambang', 'Battambang', 'Kantumruy Pro', system-ui, sans-serif;
+    --font-khmer: 'Khmer OS Siemreap', 'Siemreap', 'Kantumruy Pro', 'Battambang', system-ui, sans-serif;
   }
 
   body {
-    font-family: 'Khmer OS Battambang', 'Battambang', 'Kantumruy Pro', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    font-weight: 700;
-    font-size: 16px;
-    line-height: 1.65;
-    letter-spacing: 0.015em;
+    font-family: 'Khmer OS Siemreap', 'Siemreap', 'Plus Jakarta Sans', 'Kantumruy Pro', system-ui, -apple-system, sans-serif;
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
-  /* Ensure inputs, buttons, and headings use Khmer OS Battambang with clear bold weight */
+  /* Optimize Khmer script legibility with slightly bolder weight */
   button, input, select, textarea, optgroup {
     font-family: inherit;
-    font-weight: 700;
+    font-weight: 550;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: inherit;
-    font-weight: 800;
-    line-height: 1.35;
+    font-weight: 700;
+    line-height: 1.4;
   }
 
-  p, span, label, td, th {
-    font-weight: 600;
+  p, span, label {
+    font-weight: 500;
   }
 }
 

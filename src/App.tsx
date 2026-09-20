@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar, NavigationTab } from './components/Sidebar';
+import { TopBar } from './components/TopBar';
 import { Dashboard } from './components/Dashboard';
 import { ScannerPage } from './components/ScannerPage';
 import { HistoryTable } from './components/HistoryTable';
@@ -11,7 +12,7 @@ import { StationQrModal } from './components/StationQrModal';
 import { OfficeManagement } from './components/OfficeManagement';
 import { PayrollManagement } from './components/PayrollManagement';
 import { LoginForm } from './components/LoginForm';
-import { Language, AppSettings, AttendanceRecord, AttendanceScanResult, UserAccount, UserRole } from './types';
+import { Language, AppSettings, AttendanceRecord, AttendanceScanResult, UserAccount } from './types';
 import { 
   getAppSettings, 
   getAttendanceRecords, 
@@ -23,23 +24,9 @@ import { playSuccessChime, playErrorBuzz } from './utils/audio';
 import { 
   CheckCircle2, 
   AlertCircle, 
-  X,
-  ShieldAlert,
-  Lock,
-  UserCheck,
-  QrCode,
-  History,
-  ArrowRight,
-  CircleDollarSign
+  X 
 } from 'lucide-react';
 import { translations } from './i18n/translations';
-
-// Strict Role-Based Access Control (RBAC) Mapping
-export const ROLE_ALLOWED_TABS: Record<UserRole, NavigationTab[]> = {
-  admin: ['dashboard', 'scanner', 'history', 'employees', 'payroll', 'departments', 'office', 'settings', 'portal'],
-  manager: ['dashboard', 'scanner', 'history', 'employees', 'payroll', 'departments', 'office', 'portal'],
-  staff: ['scanner', 'history', 'portal']
-};
 
 export default function App() {
   // 1. Language state
@@ -63,10 +50,35 @@ export default function App() {
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
-  // 3. Navigation Tab state - staff defaults directly to QR scanner
+  // 3. Navigation Tab state
   const [currentTab, setCurrentTab] = useState<NavigationTab>(() => {
-    return currentUser.role === 'staff' ? 'scanner' : 'dashboard';
+    return currentUser.role === 'staff' ? 'portal' : 'dashboard';
   });
+  const [previousTab, setPreviousTab] = useState<NavigationTab>(() => {
+    return currentUser.role === 'staff' ? 'portal' : 'dashboard';
+  });
+
+  const handleSelectTab = (tab: NavigationTab) => {
+    if (tab !== 'scanner') {
+      setPreviousTab(tab);
+    } else if (currentTab !== 'scanner') {
+      setPreviousTab(currentTab);
+    }
+    setCurrentTab(tab);
+  };
+
+  const handleOpenScanner = () => {
+    if (currentTab !== 'scanner') {
+      setPreviousTab(currentTab);
+    }
+    setCurrentTab('scanner');
+  };
+
+  const handleCloseScanner = () => {
+    const fallbackTab = currentUser.role === 'staff' ? 'portal' : 'dashboard';
+    const targetTab = (previousTab && previousTab !== 'scanner') ? previousTab : fallbackTab;
+    setCurrentTab(targetTab);
+  };
 
   // 4. Mobile sidebar toggle state
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -106,8 +118,8 @@ export default function App() {
     localStorage.setItem('attendance_active_user_id', user.id);
     localStorage.setItem('attendance_is_authenticated', 'true');
 
-    if (user.role === 'staff' && !ROLE_ALLOWED_TABS.staff.includes(currentTab)) {
-      setCurrentTab('scanner');
+    if (user.role === 'staff' && (currentTab === 'dashboard' || currentTab === 'settings')) {
+      setCurrentTab('portal');
     } else if (user.role !== 'staff' && currentTab === 'portal') {
       setCurrentTab('dashboard');
     }
@@ -141,19 +153,12 @@ export default function App() {
   const handleSwitchUser = (user: UserAccount) => {
     setCurrentUser(user);
     localStorage.setItem('attendance_active_user_id', user.id);
-    const allowed = ROLE_ALLOWED_TABS[user.role];
-    if (!allowed.includes(currentTab)) {
-      setCurrentTab(user.role === 'staff' ? 'scanner' : 'dashboard');
+    if (user.role === 'staff' && (currentTab === 'dashboard' || currentTab === 'settings')) {
+      setCurrentTab('portal');
+    } else if (user.role !== 'staff' && currentTab === 'portal') {
+      setCurrentTab('dashboard');
     }
   };
-
-  // Continuous RBAC Guard: If active user role changes or doesn't have access to current tab, redirect
-  useEffect(() => {
-    const allowed = ROLE_ALLOWED_TABS[currentUser.role];
-    if (!allowed.includes(currentTab)) {
-      setCurrentTab(currentUser.role === 'staff' ? 'scanner' : 'dashboard');
-    }
-  }, [currentUser.role, currentTab]);
 
   // Handler for scan completed on ScannerPage
   const handleScanComplete = (result: AttendanceScanResult) => {
@@ -246,7 +251,7 @@ export default function App() {
       {/* 1. Left-Side Navigation Bar (Desktop Persistent + Mobile Drawer) */}
       <Sidebar
         currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
+        setCurrentTab={handleSelectTab}
         language={language}
         setLanguage={setLanguage}
         settings={settings}
@@ -257,11 +262,25 @@ export default function App() {
         isAuthenticated={isAuthenticated}
         mobileOpen={mobileSidebarOpen}
         setMobileOpen={setMobileSidebarOpen}
-        onOpenStationQr={() => setCurrentTab('office')}
+        onOpenStationQr={() => handleSelectTab('office')}
       />
 
       {/* 2. Main Content Container (Padded left for desktop sidebar) */}
       <div className="flex-1 lg:pl-72 flex flex-col min-w-0">
+
+        {/* Top Header Bar with Top-Right User Profile, Cloud Status, and Language Controls */}
+        <TopBar
+          currentTab={currentTab}
+          language={language}
+          setLanguage={setLanguage}
+          settings={settings}
+          currentUser={currentUser}
+          isAuthenticated={isAuthenticated}
+          onOpenLogin={() => setIsLoginModalOpen(true)}
+          onLogout={handleLogout}
+          onOpenMobileMenu={() => setMobileSidebarOpen(true)}
+          onCloseScanner={handleCloseScanner}
+        />
 
         {/* Global Toast Notification */}
         {globalToast && (
@@ -292,171 +311,93 @@ export default function App() {
 
         {/* 3. Active Tab View based on role & selected tab */}
         <main className="flex-1">
-          {/* If the current user's role does not have permission for the current tab, show Access Denied */}
-          {!ROLE_ALLOWED_TABS[currentUser.role].includes(currentTab) ? (
-            <div className="max-w-2xl mx-auto py-12 px-4 text-center">
-              <div className="bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-xl space-y-6">
-                <div className="w-16 h-16 rounded-2xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
-                  <ShieldAlert className="w-8 h-8 text-amber-600" />
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold uppercase tracking-wide">
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>{language === 'km' ? 'សិទ្ធិកម្រិតបុគ្គលិក (Staff Restricted)' : 'Staff Restricted Access'}</span>
-                  </div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-                    {language === 'km' ? 'គ្មានសិទ្ធិចូលមើលមុខងារនេះទេ' : 'Access Restricted for Staff Role'}
-                  </h2>
-                  <p className="text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
-                    {language === 'km' 
-                      ? 'មុខងារគ្រប់គ្រងនេះត្រូវបានកំណត់សិទ្ធិសម្រាប់តែ Admin និង Manager ប៉ុណ្ណោះ។ ក្នុងនាមជាបុគ្គលិក (Staff) លោកអ្នកមិនអាចមើល ឬកែប្រែទិន្នន័យក្រុមហ៊ុនឡើយ។' 
-                      : 'This management module is restricted to Administrators and Department Managers. As a staff employee, you do not have permission to access company-wide administrative data.'}
-                  </p>
-                </div>
+          {currentTab === 'portal' && (
+            <StaffPortal
+              language={language}
+              currentUser={currentUser}
+              records={records}
+              onScanNow={handleSimulateScan}
+              onOpenScanner={handleOpenScanner}
+              settings={settings}
+              onOpenStationQrModal={() => handleSelectTab('office')}
+            />
+          )}
 
-                {/* Permitted modules for staff */}
-                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-left space-y-3">
-                  <p className="text-xs font-bold text-slate-700">
-                    {language === 'km' ? 'មុខងារដែលបុគ្គលិកអាចប្រើប្រាស់បាន (មើលឃើញតែ ៣ មុខងារនេះ)៖' : 'Modules authorized for your staff account (Only these 3):'}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentTab('scanner')}
-                      className="p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-slate-800 flex items-center gap-2 font-semibold transition-all cursor-pointer shadow-2xs"
-                    >
-                      <QrCode className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span>{language === 'km' ? 'ម៉ាស៊ីនស្កេន QR' : 'QR Scanner'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentTab('history')}
-                      className="p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-slate-800 flex items-center gap-2 font-semibold transition-all cursor-pointer shadow-2xs"
-                    >
-                      <History className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span>{language === 'km' ? 'ប្រវត្តិវត្តមាន' : 'Attendance History'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentTab('portal')}
-                      className="p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 text-slate-800 flex items-center gap-2 font-semibold transition-all cursor-pointer shadow-2xs"
-                    >
-                      <CircleDollarSign className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{language === 'km' ? 'ចំនួនប្រាក់ខែរបស់ខ្លួន' : 'My Salary & Payslip'}</span>
-                    </button>
-                  </div>
-                </div>
+          {currentTab === 'dashboard' && (
+            <Dashboard
+              language={language}
+              settings={settings}
+              records={records}
+              currentUser={currentUser}
+              onOpenScanner={handleOpenScanner}
+              onOpenHistory={() => handleSelectTab('history')}
+            />
+          )}
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentTab('scanner')}
-                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <span>{language === 'km' ? 'ត្រឡប់ទៅ ម៉ាស៊ីនស្កេន QR' : 'Go to QR Scanner'}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsLoginModalOpen(true)}
-                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-sm transition-all cursor-pointer"
-                  >
-                    {language === 'km' ? 'ប្តូរគណនី (Switch Account)' : 'Switch Account'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              {currentTab === 'portal' && (
-                <StaffPortal
-                  language={language}
-                  currentUser={currentUser}
-                  records={records}
-                  onScanNow={handleSimulateScan}
-                  onOpenScanner={() => setCurrentTab('scanner')}
-                  settings={settings}
-                  onOpenStationQrModal={() => setIsStationQrOpen(true)}
-                />
-              )}
+          {currentTab === 'scanner' && (
+            <ScannerPage
+              language={language}
+              settings={settings}
+              currentUser={currentUser}
+              onScanComplete={handleScanComplete}
+              onOpenStationQrModal={() => handleSelectTab('office')}
+              onClose={handleCloseScanner}
+            />
+          )}
 
-              {currentTab === 'dashboard' && (
-                <Dashboard
-                  language={language}
-                  settings={settings}
-                  records={records}
-                  currentUser={currentUser}
-                  onOpenScanner={() => setCurrentTab('scanner')}
-                  onOpenHistory={() => setCurrentTab('history')}
-                />
-              )}
+          {currentTab === 'history' && (
+            <HistoryTable
+              language={language}
+              records={records}
+              onClearRecords={handleClearRecords}
+              currentUser={currentUser}
+            />
+          )}
 
-              {currentTab === 'scanner' && (
-                <ScannerPage
-                  language={language}
-                  settings={settings}
-                  currentUser={currentUser}
-                  onScanComplete={handleScanComplete}
-                  onOpenStationQrModal={() => setIsStationQrOpen(true)}
-                />
-              )}
+          {currentTab === 'employees' && (
+            <EmployeeDirectory
+              language={language}
+              currentUser={currentUser}
+              records={records}
+              onSimulateScan={handleSimulateScan}
+            />
+          )}
 
-              {currentTab === 'history' && (
-                <HistoryTable
-                  language={language}
-                  records={records}
-                  onClearRecords={handleClearRecords}
-                  currentUser={currentUser}
-                />
-              )}
+          {currentTab === 'payroll' && (
+            <PayrollManagement
+              language={language}
+              currentUser={currentUser}
+              records={records}
+            />
+          )}
 
-              {currentTab === 'employees' && (
-                <EmployeeDirectory
-                  language={language}
-                  currentUser={currentUser}
-                  records={records}
-                  onSimulateScan={handleSimulateScan}
-                />
-              )}
+          {currentTab === 'departments' && (
+            <DepartmentManagement
+              language={language}
+              currentUser={currentUser}
+              records={records}
+              onOpenScanner={handleOpenScanner}
+            />
+          )}
 
-              {currentTab === 'payroll' && (
-                <PayrollManagement
-                  language={language}
-                  currentUser={currentUser}
-                  records={records}
-                />
-              )}
+          {currentTab === 'office' && (
+            <OfficeManagement
+              language={language}
+              settings={settings}
+              currentUser={currentUser}
+              onUpdateSettings={(newSettings) => setSettings(newSettings)}
+              onOpenScanner={handleOpenScanner}
+            />
+          )}
 
-              {currentTab === 'departments' && (
-                <DepartmentManagement
-                  language={language}
-                  currentUser={currentUser}
-                  records={records}
-                  onOpenScanner={() => setCurrentTab('scanner')}
-                />
-              )}
-
-              {currentTab === 'office' && (
-                <OfficeManagement
-                  language={language}
-                  settings={settings}
-                  currentUser={currentUser}
-                  onUpdateSettings={(newSettings) => setSettings(newSettings)}
-                  onOpenScanner={() => setCurrentTab('scanner')}
-                />
-              )}
-
-              {currentTab === 'settings' && (
-                <SettingsModal
-                  language={language}
-                  settings={settings}
-                  currentUser={currentUser}
-                  onSwitchToAdmin={() => handleSwitchUser(USER_PROFILES[0])}
-                  onUpdateSettings={(newSettings) => setSettings(newSettings)}
-                />
-              )}
-            </>
+          {currentTab === 'settings' && (
+            <SettingsModal
+              language={language}
+              settings={settings}
+              currentUser={currentUser}
+              onSwitchToAdmin={() => handleSwitchUser(USER_PROFILES[0])}
+              onUpdateSettings={(newSettings) => setSettings(newSettings)}
+            />
           )}
         </main>
 
