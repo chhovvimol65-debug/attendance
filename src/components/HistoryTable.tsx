@@ -17,6 +17,7 @@ import { Language, AttendanceRecord, UserAccount, Department } from '../types';
 import { translations } from '../i18n/translations';
 import { getStoredEmployees } from '../data/mockEmployees';
 import { getStoredDepartments, isEmployeeInDepartment } from '../data/mockDepartments';
+import { showKhmerAlert } from '../utils/alertNotification';
 
 interface HistoryTableProps {
   language: Language;
@@ -47,6 +48,22 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
 
   const storedEmployees = useMemo(() => getStoredEmployees(), []);
 
+  // Current month calculation
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthNum = now.getMonth() + 1;
+  const currentYearMonth = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
+
+  const monthNamesKm = [
+    'មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា',
+    'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'
+  ];
+  const monthNamesEn = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentMonthName = language === 'km' ? monthNamesKm[now.getMonth()] : monthNamesEn[now.getMonth()];
+
   const [configuredDepartments, setConfiguredDepartments] = useState<Department[]>(() => getStoredDepartments());
 
   useEffect(() => {
@@ -71,6 +88,45 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
     const dates = Array.from(new Set(records.map(r => r.date)));
     return dates.sort().reverse();
   }, [records]);
+
+  // Current month records (scoped to user role permissions)
+  const currentMonthRecords = useMemo(() => {
+    return records.filter((r) => {
+      const rMonth = r.date ? r.date.substring(0, 7) : (r.timestamp ? r.timestamp.substring(0, 7) : '');
+      if (rMonth !== currentYearMonth) return false;
+
+      // Staff self filter
+      if (staffOnlyFilter && currentUser?.employeeId && r.employeeId !== currentUser.employeeId) {
+        return false;
+      }
+
+      // Manager department scope constraint
+      if (isManager && managerDept) {
+        const emp = storedEmployees.find(e => e.id === r.employeeId);
+        const deptMatch = (r.department && r.department.toLowerCase() === managerDept.toLowerCase()) || 
+                          (emp && emp.department.toLowerCase() === managerDept.toLowerCase());
+        if (!deptMatch) return false;
+      }
+
+      // Admin department filter if selected
+      if (isAdmin && selectedDeptObj) {
+        const emp = storedEmployees.find(e => e.id === r.employeeId);
+        if (emp) {
+          if (!isEmployeeInDepartment(emp, selectedDeptObj)) return false;
+        } else {
+          const rDept = (r.department || '').toLowerCase();
+          const dName = selectedDeptObj.name.toLowerCase();
+          if (!rDept.includes(dName) && !dName.includes(rDept)) return false;
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+  }, [records, currentYearMonth, staffOnlyFilter, currentUser, isManager, managerDept, isAdmin, selectedDeptObj, storedEmployees, sortOrder]);
 
   // Filtered and sorted records
   const filteredRecords = useMemo(() => {
@@ -115,7 +171,10 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
         }
 
         // Date filter
-        if (selectedDate !== 'all' && r.date !== selectedDate) {
+        if (selectedDate === 'current_month') {
+          const rMonth = r.date ? r.date.substring(0, 7) : (r.timestamp ? r.timestamp.substring(0, 7) : '');
+          if (rMonth !== currentYearMonth) return false;
+        } else if (selectedDate !== 'all' && r.date !== selectedDate) {
           return false;
         }
 
@@ -131,35 +190,79 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
         const timeB = new Date(b.timestamp).getTime();
         return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
       });
-  }, [records, searchQuery, selectedDate, selectedType, sortOrder]);
+  }, [records, searchQuery, selectedDate, selectedType, sortOrder, currentYearMonth, staffOnlyFilter, currentUser, isManager, managerDept, isAdmin, selectedDeptObj, storedEmployees]);
 
-  // Export to CSV
-  const handleExportCsv = () => {
-    if (filteredRecords.length === 0) return;
+  // Generic CSV Export helper
+  const exportRecordsToCsv = (recordsToExport: AttendanceRecord[], filename: string, isMonthExport = false) => {
+    if (recordsToExport.length === 0) return;
 
-    const headers = ['Record ID', 'Request ID', 'Client ID', 'Employee ID', 'Full Name', 'Department', 'Action', 'Date', 'Time', 'Timestamp', 'Synced'];
-    const rows = filteredRecords.map(r => [
-      r.id,
-      r.requestId,
-      r.clientId,
-      r.employeeId,
-      `"${r.fullName.replace(/"/g, '""')}"`,
-      `"${(r.department || '').replace(/"/g, '""')}"`,
-      r.type,
-      r.date,
-      r.time,
-      r.timestamp,
-      r.syncedToGoogleSheet ? 'YES' : 'NO'
-    ]);
+    const headers = [
+      'Record ID',
+      'Employee ID',
+      'Full Name (EN)',
+      'Full Name (KH)',
+      'Department',
+      'Action',
+      'Date',
+      'Time',
+      'Geofence Status',
+      'Sync Status',
+      'Timestamp'
+    ];
+
+    const rows = recordsToExport.map(r => {
+      const emp = storedEmployees.find(e => e.id === r.employeeId);
+      const fullNameKh = emp?.fullNameKhmer || '';
+      const actionLabel = r.type === 'check_in' ? 'Check In (ចូល)' : 'Check Out (ចេញ)';
+      const geofence = r.location?.inGeofence !== undefined 
+        ? (r.location.inGeofence ? 'Inside Office' : 'Outside Office') 
+        : 'N/A';
+      const synced = r.syncedToGoogleSheet ? 'Synced' : 'Local';
+
+      return [
+        r.id,
+        r.employeeId,
+        `"${r.fullName.replace(/"/g, '""')}"`,
+        `"${fullNameKh.replace(/"/g, '""')}"`,
+        `"${(r.department || emp?.department || '').replace(/"/g, '""')}"`,
+        `"${actionLabel}"`,
+        r.date,
+        r.time,
+        `"${geofence}"`,
+        `"${synced}"`,
+        r.timestamp
+      ];
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `attendance_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    // Alert notification in Khmer
+    showKhmerAlert({
+      type: 'success',
+      title: isMonthExport ? 'ទាញយកទិន្នន័យប្រចាំខែជោគជ័យ' : 'ទាញយកទិន្នន័យជោគជ័យ',
+      message: isMonthExport
+        ? `បានទាញយកទិន្នន័យវត្តមានប្រចាំខែ ${currentMonthName} ឆ្នាំ ${currentYear} (${recordsToExport.length} កំណត់ត្រា) ជាឯកសារ CSV!`
+        : `បានទាញយកទិន្នន័យវត្តមាន (${recordsToExport.length} កំណត់ត្រា) ជាឯកសារ CSV!`
+    });
+  };
+
+  // Export Current Month to CSV
+  const handleExportCurrentMonthCsv = () => {
+    const filename = `attendance_${currentYearMonth}_${language === 'km' ? 'month' : currentMonthName.toLowerCase()}.csv`;
+    exportRecordsToCsv(currentMonthRecords, filename, true);
+  };
+
+  // Export Filtered Records to CSV
+  const handleExportCsv = () => {
+    const filename = `attendance_export_${new Date().toISOString().split('T')[0]}.csv`;
+    exportRecordsToCsv(filteredRecords, filename, false);
   };
 
   const handleClearWithPrompt = () => {
@@ -182,14 +285,35 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Export Current Month CSV Button */}
+          <button
+            id="btn-export-month-csv"
+            onClick={handleExportCurrentMonthCsv}
+            disabled={currentMonthRecords.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-semibold shadow-xs transition-all active:scale-95 cursor-pointer"
+            title={language === 'km' ? `ទាញយកទិន្នន័យវត្តមានប្រចាំខែ ${currentMonthName} ឆ្នាំ ${currentYear}` : `Export attendance records of ${currentMonthName} ${currentYear} as CSV`}
+          >
+            <Calendar className="w-4 h-4 text-emerald-100" />
+            <span>
+              {language === 'km' 
+                ? `ទាញយកខែនេះ (${currentMonthName})` 
+                : `Export Month (${currentMonthName.slice(0, 3)})`}
+            </span>
+            <span className="px-1.5 py-0.5 rounded-md text-[11px] bg-emerald-800/90 text-emerald-100 font-bold">
+              {currentMonthRecords.length}
+            </span>
+          </button>
+
+          {/* Export Filtered CSV Button */}
           <button
             id="btn-export-csv"
             onClick={handleExportCsv}
             disabled={filteredRecords.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-semibold shadow-sm transition-all active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-100 disabled:text-slate-400 text-slate-700 rounded-xl text-sm font-semibold border border-slate-200 transition-all active:scale-95 cursor-pointer"
+            title={language === 'km' ? 'ទាញយកតាមតម្រងបច្ចុប្បន្ន' : 'Export current filtered records'}
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-4 h-4 text-slate-500" />
             <span>{t.exportCsv}</span>
           </button>
 
@@ -198,7 +322,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
               id="btn-clear-logs"
               onClick={handleClearWithPrompt}
               disabled={records.length === 0}
-              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 disabled:opacity-40 border border-slate-200 rounded-xl text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 disabled:opacity-40 border border-slate-200 rounded-xl text-sm font-medium transition-colors cursor-pointer"
               title={t.clearLogs}
             >
               <Trash2 className="w-4 h-4" />
@@ -312,6 +436,9 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="all">{t.allDates}</option>
+              <option value="current_month">
+                {language === 'km' ? `📅 ខែនេះ (${currentMonthName} ${currentYear})` : `📅 This Month (${currentMonthName} ${currentYear})`}
+              </option>
               {uniqueDates.map(date => (
                 <option key={date} value={date}>{date}</option>
               ))}

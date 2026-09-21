@@ -18,6 +18,7 @@ import { Language, Department, Employee, AttendanceRecord, UserAccount } from '.
 import { translations } from '../i18n/translations';
 import { getStoredDepartments, saveStoredDepartments } from '../data/mockDepartments';
 import { getStoredEmployees } from '../data/mockEmployees';
+import { showKhmerSaveAlert, showKhmerDeleteAlert } from '../utils/alertNotification';
 
 interface DepartmentManagementProps {
   language: Language;
@@ -196,6 +197,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
 
       setDepartments(updated);
       saveStoredDepartments(updated);
+      const deptName = formData.nameKhmer.trim() || formData.name.trim();
+      showKhmerSaveAlert(`បានរក្សាទុកការកែប្រែនាយកដ្ឋាន «${deptName}» (${cleanCode}) ដោយជោគជ័យ!`, 'រក្សាទុកជោគជ័យ');
     } else {
       // Create new
       const duplicate = departments.some(d => d.code.toUpperCase() === cleanCode);
@@ -220,6 +223,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       const updated = [...departments, newDept];
       setDepartments(updated);
       saveStoredDepartments(updated);
+      const deptName = formData.nameKhmer.trim() || formData.name.trim();
+      showKhmerSaveAlert(`បានរក្សាទុកនាយកដ្ឋានថ្មី «${deptName}» (${cleanCode}) ដោយជោគជ័យ!`, 'រក្សាទុកជោគជ័យ');
     }
 
     setIsAddModalOpen(false);
@@ -231,6 +236,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     setDepartments(updated);
     saveStoredDepartments(updated);
     setDeleteConfirmDept(null);
+    const deptName = dept.nameKhmer || dept.name;
+    showKhmerDeleteAlert(`បានលុបនាយកដ្ឋាន «${deptName}» (${dept.code}) ចេញពីប្រព័ន្ធដោយជោគជ័យ!`, 'លុបបានជោគជ័យ');
   };
 
   // Color theme helper

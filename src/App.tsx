@@ -27,6 +27,8 @@ import {
   X 
 } from 'lucide-react';
 import { translations } from './i18n/translations';
+import { KhmerAlertBanner } from './components/KhmerAlertBanner';
+import { showKhmerDeleteAlert } from './utils/alertNotification';
 
 export default function App() {
   // 1. Language state
@@ -207,12 +209,16 @@ export default function App() {
   const handleClearRecords = () => {
     clearAttendanceRecords();
     setRecords([]);
+    showKhmerDeleteAlert('បានលុបប្រវត្តិកត់ត្រាវត្តមានទាំងអស់ចេញពីប្រព័ន្ធដោយជោគជ័យ!', 'លុបបានជោគជ័យ');
   };
 
   // If user is logged out, show the dedicated Log In screen
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
+        {/* Khmer System Alert Banner */}
+        <KhmerAlertBanner />
+
         {/* Global Toast */}
         {globalToast && (
           <div className="fixed top-5 right-5 z-50 max-w-sm w-full animate-in fade-in slide-in-from-top-5 duration-300">
@@ -247,6 +253,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row selection:bg-indigo-100 selection:text-indigo-900">
+      {/* Floating Global Khmer Alert Banner */}
+      <KhmerAlertBanner />
       
       {/* 1. Left-Side Navigation Bar (Desktop Persistent + Mobile Drawer) */}
       <Sidebar

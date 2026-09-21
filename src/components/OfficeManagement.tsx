@@ -29,6 +29,7 @@ import {
   evaluateGeofence, 
   formatDistance 
 } from '../utils/geolocation';
+import { showKhmerSaveAlert } from '../utils/alertNotification';
 
 interface OfficeManagementProps {
   language: Language;
@@ -195,11 +196,9 @@ export const OfficeManagement: React.FC<OfficeManagementProps> = ({
     };
 
     onUpdateSettings(updated);
-    setSaveSuccessMessage(
-      language === 'km' 
-        ? 'បានរក្សាទុកការកំណត់ការិយាល័យ និង Geofence ដោយជោគជ័យ!' 
-        : 'Office location and geofence settings saved successfully!'
-    );
+    const successMsg = 'បានរក្សាទុកការកំណត់ទីតាំងការិយាល័យ និង Geofence ដោយជោគជ័យ!';
+    showKhmerSaveAlert(successMsg, 'រក្សាទុកជោគជ័យ');
+    setSaveSuccessMessage(successMsg);
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
 

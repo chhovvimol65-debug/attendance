@@ -18,7 +18,8 @@ import {
   SlidersHorizontal,
   RefreshCw,
   Eye,
-  DollarSign
+  DollarSign,
+  Save
 } from 'lucide-react';
 import { 
   Employee, 
@@ -36,6 +37,7 @@ import {
   getWorkDaysInMonth 
 } from '../services/payrollService';
 import { PayslipModal } from './PayslipModal';
+import { showKhmerSaveAlert } from '../utils/alertNotification';
 
 interface PayrollManagementProps {
   language: Language;
@@ -201,6 +203,13 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
     window.print();
   };
 
+  const handleSavePayroll = () => {
+    if (!currentPeriod) return;
+    savePayrollPeriod(currentPeriod);
+    const monthName = language === 'km' ? monthNamesKm[selectedMonth - 1] : monthNamesEn[selectedMonth - 1];
+    showKhmerSaveAlert(`បានរក្សាទុកតារាងបើកប្រាក់ខែ ${monthName} ឆ្នាំ ${selectedYear} ដោយជោគជ័យ!`, 'រក្សាទុកជោគជ័យ');
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-200">
       
@@ -241,6 +250,16 @@ export const PayrollManagement: React.FC<PayrollManagementProps> = ({
                 ? (language === 'km' ? 'កំពុងគណនា...' : 'Calculating...') 
                 : (language === 'km' ? 'គណនាប្រាក់ខែឡើងវិញ' : 'Generate / Recalculate')}
             </span>
+          </button>
+
+          <button
+            id="btn-save-payroll"
+            onClick={handleSavePayroll}
+            disabled={!currentPeriod || isCalculating}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-200 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>{language === 'km' ? 'រក្សាទុកតារាងប្រាក់ខែ' : 'Save Payroll'}</span>
           </button>
 
           <button

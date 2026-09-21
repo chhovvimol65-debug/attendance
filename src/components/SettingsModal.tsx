@@ -39,6 +39,7 @@ import { getStoredEmployees } from '../data/mockEmployees';
 import { getStoredDepartments } from '../data/mockDepartments';
 import { downloadAttendanceExcelTemplate } from '../utils/excelExport';
 import { ShieldAlert, Shield } from 'lucide-react';
+import { showKhmerSaveAlert } from '../utils/alertNotification';
 
 interface SettingsModalProps {
   language: Language;
@@ -266,6 +267,7 @@ function jsonResponse(data) {
     });
     onUpdateSettings(updated);
     setSaveSuccess(true);
+    showKhmerSaveAlert('បានរក្សាទុកការកំណត់ប្រព័ន្ធទូទៅដោយជោគជ័យ!', 'រក្សាទុកជោគជ័យ');
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 

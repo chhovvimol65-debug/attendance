@@ -38,6 +38,7 @@ import { getStoredEmployees, saveStoredEmployees } from '../data/mockEmployees';
 import { getStoredDepartments, isEmployeeInDepartment } from '../data/mockDepartments';
 import { downloadAttendanceExcelTemplate } from '../utils/excelExport';
 import { EmployeeProfileModal } from './EmployeeProfileModal';
+import { showKhmerSaveAlert, showKhmerDeleteAlert } from '../utils/alertNotification';
 
 interface EmployeeDirectoryProps {
   language: Language;
@@ -377,8 +378,13 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     setEmployees(updatedList);
     saveStoredEmployees(updatedList);
     setIsAddModalOpen(false);
-    setToastMessage(language === 'km' ? 'បានរក្សាទុកព័ត៌មានបុគ្គលិកដោយជោគជ័យ' : 'Employee information saved successfully');
-    setTimeout(() => setToastMessage(null), 3000);
+    const savedName = formData.fullNameKhmer || formData.fullName;
+    const saveAlertMsg = editingEmployee
+      ? `បានរក្សាទុកការកែប្រែព័ត៌មានបុគ្គលិក «${savedName}» (${formData.id}) ដោយជោគជ័យ!`
+      : `បានរក្សាទុកព័ត៌មានបុគ្គលិកថ្មី «${savedName}» (${formData.id}) ដោយជោគជ័យ!`;
+    showKhmerSaveAlert(saveAlertMsg, 'រក្សាទុកជោគជ័យ');
+    setToastMessage(saveAlertMsg);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Open Resignation Modal (Admin & Manager)
@@ -392,7 +398,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const handleConfirmResign = () => {
     if (!resigningEmployee) return;
     const targetId = resigningEmployee.id;
-    const targetName = language === 'km' ? (resigningEmployee.fullNameKhmer || resigningEmployee.fullName) : resigningEmployee.fullName;
+    const targetName = resigningEmployee.fullNameKhmer || resigningEmployee.fullName;
 
     const updated = employees.map(emp => {
       if (emp.id === targetId) {
@@ -410,13 +416,15 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     setEmployees(updated);
     saveStoredEmployees(updated);
     setResigningEmployee(null);
-    setToastMessage(language === 'km' ? `បានកត់ត្រាការឈប់ធ្វើការរបស់ ${targetName} ដោយជោគជ័យ` : `Successfully marked ${targetName} as resigned`);
-    setTimeout(() => setToastMessage(null), 3500);
+    const resignMsg = `បានកត់ត្រាការឈប់ធ្វើការរបស់បុគ្គលិក «${targetName}» (${targetId}) ដោយជោគជ័យ!`;
+    showKhmerSaveAlert(resignMsg, 'កត់ត្រាជោគជ័យ');
+    setToastMessage(resignMsg);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Reactivate Resigned Employee
   const handleReactivateEmployee = (emp: Employee) => {
-    const targetName = language === 'km' ? (emp.fullNameKhmer || emp.fullName) : emp.fullName;
+    const targetName = emp.fullNameKhmer || emp.fullName;
     const updated = employees.map(e => {
       if (e.id === emp.id) {
         return {
@@ -432,8 +440,10 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
 
     setEmployees(updated);
     saveStoredEmployees(updated);
-    setToastMessage(language === 'km' ? `បានដំណើរការបុគ្គលិក ${targetName} ឡើងវិញដោយជោគជ័យ` : `Successfully reactivated ${targetName}`);
-    setTimeout(() => setToastMessage(null), 3500);
+    const reactivateMsg = `បានដំណើរការបុគ្គលិក «${targetName}» (${emp.id}) ឡើងវិញដោយជោគជ័យ!`;
+    showKhmerSaveAlert(reactivateMsg, 'ដំណើរការឡើងវិញជោគជ័យ');
+    setToastMessage(reactivateMsg);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Open Permanent Delete Modal (Admin only)
@@ -446,7 +456,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const handleConfirmPermanentDelete = () => {
     if (!deletingEmployee) return;
     const targetId = deletingEmployee.id;
-    const targetName = language === 'km' ? (deletingEmployee.fullNameKhmer || deletingEmployee.fullName) : deletingEmployee.fullName;
+    const targetName = deletingEmployee.fullNameKhmer || deletingEmployee.fullName;
 
     const updated = employees.filter(e => e.id !== targetId);
     setEmployees(updated);
@@ -467,8 +477,10 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     }
 
     setDeletingEmployee(null);
-    setToastMessage(language === 'km' ? `បានលុបបុគ្គលិក ${targetName} (${targetId}) ចេញពីប្រព័ន្ធដោយជោគជ័យ` : `Successfully deleted employee ${targetName} (${targetId})`);
-    setTimeout(() => setToastMessage(null), 3500);
+    const deleteMsg = `បានលុបបុគ្គលិក «${targetName}» (${targetId}) ចេញពីប្រព័ន្ធដោយជោគជ័យ!`;
+    showKhmerDeleteAlert(deleteMsg, 'លុបបានជោគជ័យ');
+    setToastMessage(deleteMsg);
+    setTimeout(() => setToastMessage(null), 4500);
   };
 
   const isManager = currentUser?.role === 'manager';
