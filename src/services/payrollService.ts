@@ -230,3 +230,13 @@ export function savePayrollPeriod(period: PayrollPeriod): void {
     window.dispatchEvent(new Event('payroll-updated'));
   }
 }
+
+/**
+ * Clears all saved payroll periods
+ */
+export function clearAllPayrollPeriods(): void {
+  localStorage.setItem(PAYROLL_STORAGE_KEY, JSON.stringify([]));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('payroll-updated'));
+  }
+}

@@ -464,12 +464,13 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
 
     if (deleteCascadeRecords && typeof window !== 'undefined') {
       try {
-        const rawRecs = localStorage.getItem('company_attendance_records');
+        const rawRecs = localStorage.getItem('attendance_records_history');
         if (rawRecs) {
           const parsed: AttendanceRecord[] = JSON.parse(rawRecs);
           const filtered = parsed.filter(r => r.employeeId !== targetId);
-          localStorage.setItem('company_attendance_records', JSON.stringify(filtered));
+          localStorage.setItem('attendance_records_history', JSON.stringify(filtered));
           window.dispatchEvent(new Event('attendance-records-updated'));
+          window.dispatchEvent(new Event('storage'));
         }
       } catch (err) {
         console.error(err);

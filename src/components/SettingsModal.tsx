@@ -38,8 +38,13 @@ import { getCurrentPosition } from '../utils/geolocation';
 import { getStoredEmployees } from '../data/mockEmployees';
 import { getStoredDepartments } from '../data/mockDepartments';
 import { downloadAttendanceExcelTemplate } from '../utils/excelExport';
-import { ShieldAlert, Shield } from 'lucide-react';
-import { showKhmerSaveAlert } from '../utils/alertNotification';
+import { ShieldAlert, Shield, Trash2, AlertTriangle } from 'lucide-react';
+import { showKhmerSaveAlert, showKhmerDeleteAlert } from '../utils/alertNotification';
+import { 
+  clearAttendanceRecords, 
+  clearAllSystemData 
+} from '../services/attendanceService';
+import { clearAllPayrollPeriods } from '../services/payrollService';
 
 interface SettingsModalProps {
   language: Language;
@@ -47,6 +52,8 @@ interface SettingsModalProps {
   onUpdateSettings: (newSettings: AppSettings) => void;
   currentUser?: UserAccount;
   onSwitchToAdmin?: () => void;
+  onClearRecords?: () => void;
+  onClearAllData?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -54,7 +61,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onUpdateSettings,
   currentUser,
-  onSwitchToAdmin
+  onSwitchToAdmin,
+  onClearRecords,
+  onClearAllData
 }) => {
   const t = translations[language];
   const isAdmin = currentUser?.role === 'admin';
@@ -269,6 +278,57 @@ function jsonResponse(data) {
     setSaveSuccess(true);
     showKhmerSaveAlert('បានរក្សាទុកការកំណត់ប្រព័ន្ធទូទៅដោយជោគជ័យ!', 'រក្សាទុកជោគជ័យ');
     setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  // Data Cleanup Handlers
+  const handleClearAttendanceOnly = () => {
+    const confirmMsg = language === 'km'
+      ? 'តើអ្នកប្រាកដជាចង់សម្អាតកំណត់ត្រាវត្តមានទាំងអស់មែនទេ? សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។'
+      : 'Are you sure you want to clear all attendance records? This action cannot be undone.';
+    
+    if (window.confirm(confirmMsg)) {
+      if (onClearRecords) {
+        onClearRecords();
+      } else {
+        clearAttendanceRecords();
+        showKhmerDeleteAlert(
+          language === 'km' ? 'បានសម្អាតកំណត់ត្រាវត្តមានទាំងអស់ដោយជោគជ័យ!' : 'All attendance records cleared!',
+          language === 'km' ? 'លុបបានជោគជ័យ' : 'Cleared Successfully'
+        );
+      }
+    }
+  };
+
+  const handleClearPayrollOnly = () => {
+    const confirmMsg = language === 'km'
+      ? 'តើអ្នកប្រាកដជាចង់សម្អាតប្រវត្តិបើកប្រាក់ខែដែលបានរក្សាទុកទាំងអស់មែនទេ?'
+      : 'Are you sure you want to clear all saved payroll history?';
+    
+    if (window.confirm(confirmMsg)) {
+      clearAllPayrollPeriods();
+      showKhmerDeleteAlert(
+        language === 'km' ? 'បានសម្អាតប្រវត្តិបើកប្រាក់ខែទាំងអស់ដោយជោគជ័យ!' : 'All payroll history cleared!',
+        language === 'km' ? 'លុបបានជោគជ័យ' : 'Cleared Successfully'
+      );
+    }
+  };
+
+  const handleClearAllDataAction = () => {
+    const confirmMsg = language === 'km'
+      ? '⚠️ ការព្រមាន៖ តើអ្នកពិតជាចង់សម្អាតទិន្នន័យចោលទាំងអស់ (កំណត់ត្រាវត្តមាន និងប្រវត្តិប្រាក់ខែ) មែនទេ? ទិន្នន័យទាំងអស់នឹងត្រូវលុបចេញពីប្រព័ន្ធ!'
+      : '⚠️ Warning: Are you sure you want to clear ALL data (both attendance records and payroll history)? All data will be purged!';
+    
+    if (window.confirm(confirmMsg)) {
+      if (onClearAllData) {
+        onClearAllData();
+      } else {
+        clearAllSystemData();
+        showKhmerDeleteAlert(
+          language === 'km' ? 'បានសម្អាតទិន្នន័យទាំងអស់ចេញពីប្រព័ន្ធដោយជោគជ័យ!' : 'All system data cleared successfully!',
+          language === 'km' ? 'សម្អាតជោគជ័យ' : 'All Data Cleared'
+        );
+      }
+    }
   };
 
   // Regenerate Client ID
@@ -877,6 +937,97 @@ function jsonResponse(data) {
         </div>
 
       </form>
+
+      {/* Data Management & System Clean-up (ការគ្រប់គ្រង និងសម្អាតទិន្នន័យប្រព័ន្ធ) */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-rose-200/80 shadow-sm space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <Trash2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              {language === 'km' ? 'ការគ្រប់គ្រង និងសម្អាតទិន្នន័យ (Data Management)' : 'Data Management & System Reset'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {language === 'km' 
+                ? 'ជម្រើសសម្អាតកំណត់ត្រាវត្តមាន បញ្ជីបើកប្រាក់ខែ ឬសម្អាតទិន្នន័យទាំងអស់ចេញពីប្រព័ន្ធ' 
+                : 'Clear attendance history, saved payroll reports, or perform a complete system data purge'}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          {/* 1. Clear Attendance Records */}
+          <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {language === 'km' ? 'សម្អាតទិន្នន័យវត្តមាន' : 'Clear Attendance Logs'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'km' 
+                  ? 'លុបកំណត់ត្រាស្កេន ចូល/ចេញ ទាំងអស់ចេញពីប្រព័ន្ធ' 
+                  : 'Remove all check-in and check-out attendance records.'}
+              </p>
+            </div>
+            <button
+              id="btn-settings-clear-attendance"
+              type="button"
+              onClick={handleClearAttendanceOnly}
+              className="w-full py-2.5 px-3 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-2xs"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>{language === 'km' ? 'សម្អាតវត្តមាន' : 'Clear Attendance'}</span>
+            </button>
+          </div>
+
+          {/* 2. Clear Payroll History */}
+          <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {language === 'km' ? 'សម្អាតប្រវត្តិប្រាក់ខែ' : 'Clear Payroll History'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'km' 
+                  ? 'លុបតារាងគណនាប្រាក់ខែដែលបានរក្សាទុកទាំងអស់' 
+                  : 'Remove all saved monthly payroll calculations.'}
+              </p>
+            </div>
+            <button
+              id="btn-settings-clear-payroll"
+              type="button"
+              onClick={handleClearPayrollOnly}
+              className="w-full py-2.5 px-3 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-2xs"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>{language === 'km' ? 'សម្អាតប្រាក់ខែ' : 'Clear Payroll'}</span>
+            </button>
+          </div>
+
+          {/* 3. Clear All System Data (Master Purge) */}
+          <div className="p-4 rounded-2xl border border-rose-300 bg-rose-50/40 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center gap-1.5 text-rose-700 font-semibold text-sm">
+                <AlertTriangle className="w-4 h-4" />
+                <span>{language === 'km' ? 'សម្អាតទិន្នន័យទាំងអស់' : 'Clear All System Data'}</span>
+              </div>
+              <p className="text-xs text-rose-950/70 mt-1">
+                {language === 'km' 
+                  ? 'លុបទាំងទិន្នន័យវត្តមាន និងប្រវត្តិប្រាក់ខែឱ្យនៅទទេ (0 Records)' 
+                  : 'Purge all attendance scans and payroll history back to zero clean slate.'}
+              </p>
+            </div>
+            <button
+              id="btn-settings-clear-all-data"
+              type="button"
+              onClick={handleClearAllDataAction}
+              className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-sm shadow-rose-200"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>{language === 'km' ? 'សម្អាតចោលទាំងអស់' : 'Purge All Data'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Production Guide (.env instructions) */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-4">

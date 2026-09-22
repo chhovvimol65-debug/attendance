@@ -92,30 +92,19 @@ export function saveAppSettings(newSettings: Partial<AppSettings>): AppSettings 
 }
 
 /**
- * Retrieves all attendance records from localStorage, seeding initial data if empty.
+ * Retrieves all attendance records from localStorage.
+ * Does not force-inject mock data when cleared or empty.
  */
 export function getAttendanceRecords(): AttendanceRecord[] {
   const raw = localStorage.getItem(RECORDS_STORAGE_KEY);
   if (!raw) {
-    const initial = getInitialAttendanceRecords();
-    localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(initial));
-    return initial;
+    return [];
   }
   try {
     const parsed: AttendanceRecord[] = JSON.parse(raw);
-    const uniqueDays = new Set(parsed.map(r => r.date));
-    if (uniqueDays.size <= 7) {
-      const initial = getInitialAttendanceRecords();
-      const existingIds = new Set(parsed.map(r => r.id));
-      const todayStr = new Date().toISOString().split('T')[0];
-      const pastDaysRecords = initial.filter(r => r.date !== todayStr && !existingIds.has(r.id));
-      const combined = [...pastDaysRecords, ...parsed];
-      localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(combined));
-      return combined;
-    }
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return getInitialAttendanceRecords();
+    return [];
   }
 }
 
@@ -124,6 +113,9 @@ export function getAttendanceRecords(): AttendanceRecord[] {
  */
 export function saveAttendanceRecords(records: AttendanceRecord[]): void {
   localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(records));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('attendance-records-updated'));
+  }
 }
 
 /**
@@ -131,6 +123,30 @@ export function saveAttendanceRecords(records: AttendanceRecord[]): void {
  */
 export function clearAttendanceRecords(): void {
   localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify([]));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('attendance-records-updated'));
+    window.dispatchEvent(new Event('storage'));
+  }
+}
+
+/**
+ * Completely clears all attendance records, payroll calculations, and processed requests.
+ */
+export function clearAllSystemData(): void {
+  localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify([]));
+  localStorage.setItem('attendance_payroll_history', JSON.stringify([]));
+  localStorage.setItem(PROCESSED_REQUESTS_KEY, JSON.stringify([]));
+  localStorage.setItem('attendance_data_cleared_v1', 'true');
+  
+  // Clear in-memory cooldown caches
+  recentEmployeeScans.clear();
+  recentDeviceScanTimes.length = 0;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('attendance-records-updated'));
+    window.dispatchEvent(new Event('payroll-updated'));
+    window.dispatchEvent(new Event('storage'));
+  }
 }
 
 // In-memory timestamps for rapid rate limiting and per-employee cooldown

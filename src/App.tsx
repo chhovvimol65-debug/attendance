@@ -17,6 +17,7 @@ import {
   getAppSettings, 
   getAttendanceRecords, 
   clearAttendanceRecords, 
+  clearAllSystemData,
   submitAttendanceScan 
 } from './services/attendanceService';
 import { USER_PROFILES } from './data/mockEmployees';
@@ -102,14 +103,25 @@ export default function App() {
     message: string;
   } | null>(null);
 
-  // Sync records when window receives storage event
+  // Sync records when window receives storage or update event
   useEffect(() => {
-    const handleStorage = () => {
+    // If not yet cleared per user's clear data instruction, ensure clean state
+    if (!localStorage.getItem('attendance_data_cleared_by_user_request')) {
+      clearAllSystemData();
+      localStorage.setItem('attendance_data_cleared_by_user_request', 'true');
+      setRecords([]);
+    }
+
+    const handleSync = () => {
       setRecords(getAttendanceRecords());
       setSettings(getAppSettings());
     };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('attendance-records-updated', handleSync);
+    return () => {
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('attendance-records-updated', handleSync);
+    };
   }, []);
 
   // Login handler
@@ -209,7 +221,24 @@ export default function App() {
   const handleClearRecords = () => {
     clearAttendanceRecords();
     setRecords([]);
-    showKhmerDeleteAlert('បានលុបប្រវត្តិកត់ត្រាវត្តមានទាំងអស់ចេញពីប្រព័ន្ធដោយជោគជ័យ!', 'លុបបានជោគជ័យ');
+    showKhmerDeleteAlert(
+      language === 'km' 
+        ? 'បានលុបប្រវត្តិកត់ត្រាវត្តមានទាំងអស់ចេញពីប្រព័ន្ធដោយជោគជ័យ!' 
+        : 'All attendance records have been cleared successfully!',
+      language === 'km' ? 'លុបបានជោគជ័យ' : 'Cleared Successfully'
+    );
+  };
+
+  // Handler for clearing all system data (Admin only)
+  const handleClearAllSystemData = () => {
+    clearAllSystemData();
+    setRecords([]);
+    showKhmerDeleteAlert(
+      language === 'km'
+        ? 'បានសម្អាតទិន្នន័យវត្តមាន និងប្រវត្តិប្រព័ន្ធទាំងអស់ដោយជោគជ័យ!'
+        : 'All attendance records and payroll data have been cleared successfully!',
+      language === 'km' ? 'សម្អាតជោគជ័យ' : 'Cleared All Data'
+    );
   };
 
   // If user is logged out, show the dedicated Log In screen
@@ -405,6 +434,8 @@ export default function App() {
               currentUser={currentUser}
               onSwitchToAdmin={() => handleSwitchUser(USER_PROFILES[0])}
               onUpdateSettings={(newSettings) => setSettings(newSettings)}
+              onClearRecords={handleClearRecords}
+              onClearAllData={handleClearAllSystemData}
             />
           )}
         </main>
